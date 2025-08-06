@@ -689,6 +689,104 @@ input:focus-visible + .slider {
   .phrase-header { font-size: 0.7em; }
   .scroll-to-bottom-btn { bottom: 10px; }
 }
+/* --- ADD OR REPLACE THESE STYLES in style.css --- */
+
+/* Hide text status, only show light */
+#status-message, #audio-status {
+  display: none;
+}
+.status-display-header {
+  padding: 5px; /* Give light some space */
+}
+
+/* General Icon Button */
+.control-btn.icon-btn {
+  padding: 5px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1em;
+}
+
+.control-icon {
+  width: 24px;
+  height: 24px;
+  fill: var(--header-text-color);
+}
+
+/* Language Group Styling */
+.language-group {
+  gap: 5px; /* Tighter gap */
+}
+.language-group .setting-select {
+  max-width: 120px; /* Narrower select */
+}
+
+/* Font Size Icon Styling */
+.font-size-icon {
+  line-height: 1;
+}
+.font-size-icon.small {
+  font-size: 0.8em;
+}
+.font-size-icon.large {
+  font-size: 1.2em;
+}
+
+/* Text Flow Icon */
+.text-flow-icon {
+  font-size: 1.2em;
+  font-weight: bold;
+}
+#scroll-direction-btn.reversed .text-flow-icon {
+  transform: rotate(180deg);
+}
+
+/* Audio Toggle Icons */
+.audio-icon-on, .audio-icon-off {
+  display: none; /* Hide both by default */
+}
+/* Show the correct icon based on checkbox state */
+#audio-toggle:not(:checked) ~ .audio-icon-off {
+  display: block;
+}
+#audio-toggle:checked ~ .audio-icon-on {
+  display: block;
+}
+
+/* Screen Reader Only class to hide checkbox visually */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Keep Screen On (Power) and Wake Lock Active States */
+#wake-lock-btn .control-icon {
+  fill: rgba(255, 255, 255, 0.7); /* Dimmed when off */
+  transition: fill 0.3s;
+}
+#wake-lock-btn.active .control-icon {
+  fill: var(--success-color); /* Bright green when on */
+}
+
+/* Transcript Area Reverse Scrolling */
+#transcript-area.reversed {
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+
+/* --- THE REST OF YOUR CSS IS UNCHANGED --- */
+
 
 /* Pulse Animation */
 @keyframes pulse {
