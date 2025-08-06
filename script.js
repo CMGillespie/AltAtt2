@@ -1,4 +1,4 @@
-// Wordly Secure Viewer Script (v3 - Based on User's Working File with Fixes)
+// Wordly Secure Viewer Script (v5 - Final)
 document.addEventListener('DOMContentLoaded', () => {
 
   // --- Service Worker Registration ---
@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
   }
 
-  // --- TEMPORARY Configuration Input Elements ---
+  // --- Configuration Input Elements ---
   const configInputArea = document.getElementById('config-input-area');
   const tempSessionIdInput = document.getElementById('temp-session-id');
   const tempPasscodeInput = document.getElementById('temp-passcode');
@@ -22,19 +22,19 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- Main App DOM Elements ---
   const appPage = document.getElementById('app-page');
   const appHeader = document.getElementById('app-header');
-  const languageSelect = document.getElementById('language-select');
-  const audioToggle = document.getElementById('audio-toggle');
-  const disconnectBtn = document.getElementById('disconnect-btn');
-  const transcriptArea = document.getElementById('transcript-area');
-  const statusMessage = document.getElementById('status-message');
-  const audioStatus = document.getElementById('audio-status');
-  const collapseBtn = document.getElementById('collapse-btn');
   const headerToggleButton = document.getElementById('header-toggle-btn');
   const sessionDisplayHeader = document.getElementById('session-display-header');
+  const languageSelect = document.getElementById('language-select');
+  const audioToggle = document.getElementById('audio-toggle');
   const themeToggleBtn = document.getElementById('theme-toggle-btn');
   const loginThemeToggleBtn = document.getElementById('login-theme-toggle-btn');
-  const connectionStatusLight = document.getElementById('connection-status');
+  const collapseBtn = document.getElementById('collapse-btn');
+  const disconnectBtn = document.getElementById('disconnect-btn');
+  const transcriptArea = document.getElementById('transcript-area');
   const mainContent = document.getElementById('main-content');
+  const connectionStatusLight = document.getElementById('connection-status');
+  const statusMessage = document.getElementById('status-message');
+  const audioStatus = document.getElementById('audio-status');
   const scrollToBottomBtn = document.getElementById('scroll-to-bottom-btn');
   const newMessageCountSpan = document.getElementById('new-message-count');
   const fontSizeDecreaseBtn = document.getElementById('font-size-decrease-btn');
@@ -42,9 +42,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const fontBoldToggleBtn = document.getElementById('font-bold-toggle-btn');
   const wakeLockBtn = document.getElementById('wake-lock-btn');
   let screenWakeLock = null;
-
-  // --- NEW: Add reference to the silent audio loop element ---
-  const silentAudioLoop = document.getElementById('silent-audio-loop');
 
   // --- Application State ---
   const state = {
@@ -60,13 +57,12 @@ document.addEventListener('DOMContentLoaded', () => {
     phrases: {},
     audioQueue: [],
     isPlayingAudio: false,
-    currentAudioElement: null,
+    currentAudioElement: null, // Re-instated for simpler playback
     userScrolledUp: false,
     newMessagesWhileScrolled: 0,
     fontSize: 'normal',
     fontBold: false,
     darkMode: false,
-    // --- NEW: Add state to manage reconnection ---
     reconnectInterval: null,
     isDeliberateDisconnect: false
   };
@@ -238,77 +234,15 @@ document.addEventListener('DOMContentLoaded', () => {
       showNotification('Screen lock released.', 'info');
     }
   }
-
-  function processAudioQueue() {
-    if (state.isPlayingAudio || state.audioQueue.length === 0 || !state.audioEnabled) {
-      if ('mediaSession' in navigator) {
-        navigator.mediaSession.playbackState = 'paused';
-      }
-      return;
-    }
-    state.isPlayingAudio = true;
-    const audioItem = state.audioQueue.shift();
-    const phraseElement = transcriptArea.querySelector(`#phrase-${audioItem.phraseId}`);
-    try {
-      const audioType = 'audio/wav';
-      const blob = new Blob([new Uint8Array(audioItem.data)], { type: audioType });
-      const audioUrl = URL.createObjectURL(blob);
-      const audioElement = new Audio();
-      state.currentAudioElement = audioElement;
-      audioElement.src = audioUrl;
-      audioElement.play().then(() => {
-        audioStatus.textContent = 'Playing audio...';
-        if (phraseElement) phraseElement.classList.add('phrase-playing');
-        if ('mediaSession' in navigator) {
-          navigator.mediaSession.playbackState = 'playing';
-        }
-      }).catch(playError => {
-        console.error(`Error playing audio:`, playError);
-        audioStatus.textContent = 'Audio playback error';
-        cleanupAudio(audioUrl, phraseElement);
-      });
-      audioElement.onended = () => {
-        cleanupAudio(audioUrl, phraseElement);
-      };
-      audioElement.onerror = (errorEvent) => {
-        console.error(`Audio element error event occurred.`);
-        audioStatus.textContent = 'Audio playback error';
-        cleanupAudio(audioUrl, phraseElement);
-      };
-    } catch (error) {
-      console.error(`Error processing audio blob:`, error);
-      audioStatus.textContent = 'Error processing audio';
-      state.isPlayingAudio = false;
-      processAudioQueue();
-    }
-  }
-
-  function cleanupAudio(audioUrl, phraseElement) {
-    if (audioUrl) {
-      URL.revokeObjectURL(audioUrl);
-    }
-    if (phraseElement) {
-      phraseElement.classList.remove('phrase-playing');
-    }
-    state.isPlayingAudio = false;
-    state.currentAudioElement = null;
-    if ('mediaSession' in navigator) {
-      navigator.mediaSession.playbackState = 'paused';
-    }
-    setTimeout(processAudioQueue, 0);
-  }
   
   function handleLanguageChange(e) { const newLanguage = e.target.value; if (newLanguage === state.language) return; const oldLanguageName = getLanguageName(state.language); state.language = newLanguage; const newLanguageName = getLanguageName(newLanguage); console.log(`Language changed to ${newLanguage} (${newLanguageName})`); resetHeaderCollapseTimer(); if (state.websocket && state.websocket.readyState === WebSocket.OPEN) { const changeRequest = { type: 'change', languageCode: newLanguage }; console.log(`Sending language change request:`, JSON.stringify(changeRequest)); try { const wasAudioEnabled = state.audioEnabled; if (wasAudioEnabled) sendVoiceRequest(false); stopPlayerAudio(); state.websocket.send(JSON.stringify(changeRequest)); addSystemMessage(`Language changed to ${newLanguageName}.`); if (wasAudioEnabled) { setTimeout(() => { if (state.websocket && state.websocket.readyState === WebSocket.OPEN) { sendVoiceRequest(true); } }, 500); } } catch (e) { console.error(`Error sending language change:`, e); addSystemMessage(`Error changing language: ${e.message}`, true); languageSelect.value = state.language; } } else { console.warn(`WebSocket not open. Language change will apply on next connection.`); } }
   
-  // --- MODIFIED: Added silent loop logic ---
   function handleAudioToggle(e) { 
     state.audioEnabled = e.target.checked; 
     resetHeaderCollapseTimer(); 
     if (state.audioEnabled) { 
         audioStatus.textContent = 'Audio Ready'; 
         addSystemMessage('Audio translations enabled.'); 
-        // --- NEW ---
-        silentAudioLoop.play().catch(err => console.error("Silent loop play failed:", err));
         if (state.websocket && state.websocket.readyState === WebSocket.OPEN) { 
             sendVoiceRequest(true); 
         } 
@@ -316,8 +250,6 @@ document.addEventListener('DOMContentLoaded', () => {
     } else { 
         audioStatus.textContent = 'Audio Off'; 
         addSystemMessage('Audio translations disabled.'); 
-        // --- NEW ---
-        silentAudioLoop.pause();
         stopPlayerAudio(); 
         if (state.websocket && state.websocket.readyState === WebSocket.OPEN) { 
             sendVoiceRequest(false); 
@@ -329,10 +261,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function toggleHeaderCollapseManual() { clearTimeout(state.headerCollapseTimeout); state.headerCollapsed = !state.headerCollapsed; appHeader.classList.toggle('collapsed', state.headerCollapsed); if (!state.headerCollapsed) { resetHeaderCollapseTimer(); } }
   function resetHeaderCollapseTimer() { clearTimeout(state.headerCollapseTimeout); if (state.headerCollapsed) { state.headerCollapsed = false; appHeader.classList.remove('collapsed'); } state.headerCollapseTimeout = setTimeout(() => { if (!state.headerCollapsed) { console.log("Auto-collapsing header"); state.headerCollapsed = true; appHeader.classList.add('collapsed'); } }, HEADER_AUTO_COLLAPSE_DELAY); }
   
-  // --- MODIFIED: Added deliberate disconnect flag ---
   function disconnectSession() { 
     console.log("Disconnecting session..."); 
-    // --- NEW ---
     state.isDeliberateDisconnect = true;
     stopPlayerAudio(); 
     if (state.websocket && state.websocket.readyState !== WebSocket.CLOSED) { 
@@ -391,10 +321,8 @@ document.addEventListener('DOMContentLoaded', () => {
     } 
   }
 
-  // --- MODIFIED: Added reconnect clearing logic ---
   function handleWebSocketOpen() {
     console.log(`WebSocket connection established.`); 
-    // --- NEW ---
     if (state.reconnectInterval) {
         clearInterval(state.reconnectInterval);
         state.reconnectInterval = null;
@@ -429,12 +357,10 @@ document.addEventListener('DOMContentLoaded', () => {
     } 
   }
 
-  // --- MODIFIED: Added reconnection logic ---
   function handleWebSocketClose(event) { 
     console.log(`WebSocket closed. Code: ${event.code}, Reason: ${event.reason}, Was Clean: ${event.wasClean}`); 
     stopPlayerAudio();
     state.websocket = null;
-    // --- NEW ---
     if (state.isDeliberateDisconnect) {
         updateConnectionStatus('disconnected', 'Disconnected by user.');
         state.isDeliberateDisconnect = false;
@@ -486,6 +412,8 @@ document.addEventListener('DOMContentLoaded', () => {
         } 
     } 
   }
+  
+  // --- MODIFIED: Timestamp removed from innerHTML ---
   function handlePhraseMessage(message) { 
     const phraseId = message.phraseId; 
     let phraseElement = transcriptArea.querySelector(`#phrase-${phraseId}`); 
@@ -494,7 +422,11 @@ document.addEventListener('DOMContentLoaded', () => {
         phraseElement = document.createElement('div'); 
         phraseElement.id = `phrase-${phraseId}`; 
         phraseElement.className = 'phrase'; 
-        phraseElement.innerHTML = ` <div class="phrase-header"> <span class="speaker-name">${message.name || `Speaker ${message.speakerId.slice(-4)}`}</span> <span class="phrase-time">${new Date().toLocaleTimeString()}</span> </div> <div class="phrase-text"></div>`; 
+        phraseElement.innerHTML = `
+          <div class="phrase-header"> 
+            <span class="speaker-name">${message.name || `Speaker ${message.speakerId.slice(-4)}`}</span> 
+          </div> 
+          <div class="phrase-text"></div>`; 
         transcriptArea.appendChild(phraseElement); 
         limitTranscriptSize(transcriptArea); 
     } 
@@ -518,6 +450,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } 
     } 
   }
+
   function limitTranscriptSize(container, maxPhrases = 150) { 
     while (container.children.length > maxPhrases) { 
         container.removeChild(container.firstChild); 
@@ -567,9 +500,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } 
   }
 
-  // --- MODIFIED: Added deliberate disconnect flag ---
   function handleEndMessage(message) { 
-    // --- NEW ---
     state.isDeliberateDisconnect = true;
     const endReason = message.message ? `Reason: ${message.message}` : 'Session ended.'; 
     updateConnectionStatus('ended', endReason); 
@@ -591,6 +522,70 @@ document.addEventListener('DOMContentLoaded', () => {
     addSystemMessage(`Error: ${errorMessage}`, true); 
   }
 
+  // --- MODIFIED: Reverted to simpler audio playback logic ---
+  function processAudioQueue() {
+    if (state.isPlayingAudio || state.audioQueue.length === 0 || !state.audioEnabled) {
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = 'paused';
+      }
+      return;
+    }
+    state.isPlayingAudio = true;
+    const audioItem = state.audioQueue.shift();
+    const phraseElement = transcriptArea.querySelector(`#phrase-${audioItem.phraseId}`);
+    try {
+      const audioType = 'audio/wav';
+      const blob = new Blob([new Uint8Array(audioItem.data)], { type: audioType });
+      const audioUrl = URL.createObjectURL(blob);
+      
+      const audioElement = new Audio(); // Create a fresh element each time
+      state.currentAudioElement = audioElement;
+      audioElement.src = audioUrl;
+      
+      audioElement.play().then(() => {
+        audioStatus.textContent = 'Playing audio...';
+        if (phraseElement) phraseElement.classList.add('phrase-playing');
+        if ('mediaSession' in navigator) {
+          navigator.mediaSession.playbackState = 'playing';
+        }
+      }).catch(playError => {
+        console.error(`Error playing audio:`, playError);
+        audioStatus.textContent = 'Audio playback error';
+        cleanupAudio(audioUrl, phraseElement);
+      });
+
+      audioElement.onended = () => {
+        cleanupAudio(audioUrl, phraseElement);
+      };
+      audioElement.onerror = (errorEvent) => {
+        console.error(`Audio element error event occurred.`);
+        audioStatus.textContent = 'Audio playback error';
+        cleanupAudio(audioUrl, phraseElement);
+      };
+
+    } catch (error) {
+      console.error(`Error processing audio blob:`, error);
+      audioStatus.textContent = 'Error processing audio';
+      state.isPlayingAudio = false;
+      processAudioQueue();
+    }
+  }
+
+  function cleanupAudio(audioUrl, phraseElement) {
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl);
+    }
+    if (phraseElement) {
+      phraseElement.classList.remove('phrase-playing');
+    }
+    state.isPlayingAudio = false;
+    state.currentAudioElement = null;
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = 'paused';
+    }
+    setTimeout(processAudioQueue, 0);
+  }
+
   function stopPlayerAudio() { 
     console.log(`Stopping audio and clearing queue.`); 
     const currentAudio = state.currentAudioElement; 
@@ -598,7 +593,6 @@ document.addEventListener('DOMContentLoaded', () => {
         try { 
             if (!currentAudio.paused && !currentAudio.ended) { 
                 currentAudio.pause(); 
-                console.log(`Paused current audio element.`); 
             } 
             currentAudio.onended = null; 
             currentAudio.onerror = null; 
@@ -610,7 +604,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } 
     } 
     if (state.audioQueue.length > 0) { 
-        console.log(`Clearing ${state.audioQueue.length} items from audio queue.`); 
         state.audioQueue = []; 
     } 
     state.isPlayingAudio = false; 
@@ -620,6 +613,7 @@ document.addEventListener('DOMContentLoaded', () => {
         playingPhrase.classList.remove('phrase-playing'); 
     } 
   }
+
   function updateConnectionStatus(status, message) { 
     state.status = status; 
     if (connectionStatusLight) { 
