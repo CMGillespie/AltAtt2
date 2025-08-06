@@ -778,12 +778,6 @@ input:focus-visible + .slider {
   fill: var(--success-color); /* Bright green when on */
 }
 
-/* Transcript Area Reverse Scrolling */
-#transcript-area.reversed {
-  display: flex;
-  flex-direction: column-reverse;
-}
-
 
 /* --- THE REST OF YOUR CSS IS UNCHANGED --- */
 
