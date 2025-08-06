@@ -6,7 +6,7 @@
   <title>Alternate Wordly Attend App</title>
   <link rel="stylesheet" href="style.css">
 </head>
-<body class="font-normal">
+<body class="font-normal"> 
   <div id="config-input-area" class="config-input-area">
     <div class="login-header">
       <a href="https://wordly.ai/" target="_blank" rel="noopener noreferrer" title="Visit Wordly.ai" style="display: block; text-align: center; margin-bottom: 20px;">
@@ -23,6 +23,8 @@
       <label for="temp-passcode">Passcode (if required):</label>
       <input type="text" id="temp-passcode" placeholder="Optional passcode">
     </div>
+
+    <button id="temp-connect-btn">Connect to Session</button>
     <div class="login-theme-container">
       <button id="login-theme-toggle-btn" class="theme-toggle" title="Toggle Light/Dark Mode">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="moon-icon">
@@ -33,7 +35,7 @@
         </svg>
       </button>
     </div>
-    <button id="temp-connect-btn">Connect to Session</button>
+    
     <div id="temp-status"></div>
   </div>
 
@@ -98,8 +100,7 @@
       </button>
     </main>
   </div>
-<audio id="main-audio-player" style="display:none;"></audio>
-  
+
   <script src="script.js"></script>
 </body>
 </html>
