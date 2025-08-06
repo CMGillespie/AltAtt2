@@ -1,4 +1,4 @@
-// Wordly Secure Viewer Script (v9 - Final UI)
+// Wordly Secure Viewer Script (v10 - Final Scroll Fix)
 document.addEventListener('DOMContentLoaded', () => {
 
   if ('serviceWorker' in navigator) {
@@ -109,7 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
     stopAndClearAudio();
     appPage.style.display = 'none';
     configInputArea.style.display = 'block';
-    updateStatus('disconnected', 'Disconnected');
+    updateStatus('disconnected');
   }
 
   function handleAudioToggle() {
@@ -138,7 +138,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function connectWebSocket() {
     if (state.websocket) return;
-    updateStatus('connecting', 'Connecting...');
+    updateStatus('connecting');
     state.websocket = new WebSocket('wss://endpoint.wordly.ai/attend');
 
     state.websocket.onopen = () => {
@@ -157,9 +157,9 @@ document.addEventListener('DOMContentLoaded', () => {
       switch (message.type) {
         case 'status':
           if (message.success) {
-            updateStatus('connected', 'Connected');
+            updateStatus('connected');
             if (state.audioEnabled) sendVoiceRequest(true);
-          } else { updateStatus('error', message.message || "Connection failed"); }
+          } else { updateStatus('error'); }
           break;
         case 'phrase': handlePhrase(message); break;
         case 'speech':
@@ -175,11 +175,11 @@ document.addEventListener('DOMContentLoaded', () => {
     state.websocket.onclose = () => {
       state.websocket = null;
       if (state.isDeliberateDisconnect) return;
-      updateStatus('error', 'Reconnecting...');
+      updateStatus('error');
       if (state.reconnectInterval) clearInterval(state.reconnectInterval);
       state.reconnectInterval = setInterval(connectWebSocket, 3000);
     };
-    state.websocket.onerror = () => updateStatus('error', 'Connection Error');
+    state.websocket.onerror = () => updateStatus('error');
   }
 
   function handlePhrase(message) {
@@ -196,7 +196,6 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
             <div class="phrase-text"></div>`;
         
-        // CSS handles the visual order now, so we always just append.
         transcriptArea.appendChild(phraseElement);
     }
     
@@ -205,6 +204,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (message.isFinal) {
         if (state.scrollDirection === 'down' && isUserNearBottom) {
             scrollToTranscriptBottom();
+        } else if (state.scrollDirection === 'up') {
+            // --- MODIFIED: Auto-scroll to top in reverse mode ---
+            scrollToTranscriptTop();
         } else if (state.scrollDirection === 'down' && !isUserNearBottom) {
              state.newMessagesWhileScrolled++;
              newMessageCountSpan.textContent = `(${state.newMessagesWhileScrolled})`;
@@ -263,7 +265,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
   
-  function updateStatus(status, message) {
+  function updateStatus(status) {
     connectionStatusLight.className = `status-light ${status}`;
   }
 
@@ -274,13 +276,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const icon = scrollDirectionBtn.querySelector('.text-flow-icon');
       icon.innerHTML = state.scrollDirection === 'down' ? 'T&darr;' : 'T&uarr;';
       
-      // The CSS class now handles the visual reversal instantly.
       transcriptArea.classList.toggle('reversed', state.scrollDirection === 'up');
 
       if (state.scrollDirection === 'down') {
           scrollToTranscriptBottom();
       } else {
-          transcriptArea.scrollTop = 0;
+          scrollToTranscriptTop();
       }
   }
 
@@ -290,10 +291,11 @@ document.addEventListener('DOMContentLoaded', () => {
   async function requestWakeLock() { try { screenWakeLock = await navigator.wakeLock.request('screen'); wakeLockBtn.classList.add('active'); showNotification('Screen will stay on.', 'info'); screenWakeLock.addEventListener('release', () => { wakeLockBtn.classList.remove('active'); screenWakeLock = null; }); } catch (err) { wakeLockBtn.textContent = 'Wake Lock Failed'; showNotification('Could not activate screen lock.', 'error'); } }
   async function releaseWakeLock() { if (screenWakeLock) { await screenWakeLock.release(); screenWakeLock = null; showNotification('Screen lock released.', 'info'); } }
   function toggleContentVisibility() { resetHeaderCollapseTimer(); state.contentHidden = !state.contentHidden; mainContent.classList.toggle('transcript-hidden', state.contentHidden); collapseBtn.textContent = state.contentHidden ? 'View Text' : 'Hide Text'; }
-  function toggleHeaderCollapseManual() { clearTimeout(state.headerCollapseTimeout); state.headerCollapsed = !state.headerCollapsed; appHeader.classList.toggle('collapsed', state.headerCollapsed); if (!state.headerCollapsed) { resetHeaderCollapseTimer(); } }
+  function toggleHeaderCollapseManual() { clearTimeout(state.headerCollapseTimer); state.headerCollapsed = !state.headerCollapsed; appHeader.classList.toggle('collapsed', state.headerCollapsed); if (!state.headerCollapsed) { resetHeaderCollapseTimer(); } }
   function resetHeaderCollapseTimer() { clearTimeout(state.headerCollapseTimeout); if (state.headerCollapsed) { state.headerCollapsed = false; appHeader.classList.remove('collapsed'); } state.headerCollapseTimeout = setTimeout(() => { if (!state.headerCollapsed && document.visibilityState === 'visible') { state.headerCollapsed = true; appHeader.classList.add('collapsed'); } }, HEADER_AUTO_COLLAPSE_DELAY); }
   function isScrolledToTranscriptBottom() { if (!transcriptArea) return true; const { scrollTop, scrollHeight, clientHeight } = transcriptArea; if (clientHeight === 0) return true; return scrollHeight - Math.ceil(scrollTop) - clientHeight < 50; }
   function scrollToTranscriptBottom() { if (transcriptArea) { requestAnimationFrame(() => { transcriptArea.scrollTo({ top: transcriptArea.scrollHeight, behavior: 'smooth' }); }); state.userScrolledUp = false; state.newMessagesWhileScrolled = 0; scrollToBottomBtn.style.display = 'none'; } }
+  function scrollToTranscriptTop() { if (transcriptArea) { requestAnimationFrame(() => { transcriptArea.scrollTo({ top: 0, behavior: 'smooth' }); }); } }
   function handleTranscriptScroll() { if (!transcriptArea) return; if (state.scrollDirection === 'down') { const isNearBottom = isScrolledToTranscriptBottom(); if (!isNearBottom) { state.userScrolledUp = true; } else { state.userScrolledUp = false; state.newMessagesWhileScrolled = 0; scrollToBottomBtn.style.display = 'none'; } } }
   function handleScrollToTranscriptBottomClick() { scrollToTranscriptBottom(); }
   function isValidSessionId(sessionId) { return /^[A-Z0-9]{4}-\d{4}$/.test(sessionId); }
