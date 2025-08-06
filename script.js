@@ -1,4 +1,4 @@
-// Wordly Secure Viewer Script (v8 - Icon UI Final)
+// Wordly Secure Viewer Script (v9 - Final UI)
 document.addEventListener('DOMContentLoaded', () => {
 
   if ('serviceWorker' in navigator) {
@@ -20,7 +20,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const disconnectBtn = document.getElementById('disconnect-btn');
   const transcriptArea = document.getElementById('transcript-area');
   const connectionStatusLight = document.getElementById('connection-status');
-  const statusMessage = document.getElementById('status-message');
   const wakeLockBtn = document.getElementById('wake-lock-btn');
   const mainAudioPlayer = document.getElementById('main-audio-player');
   const scrollDirectionBtn = document.getElementById('scroll-direction-btn');
@@ -197,11 +196,8 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
             <div class="phrase-text"></div>`;
         
-        if (state.scrollDirection === 'down') {
-            transcriptArea.appendChild(phraseElement);
-        } else {
-            transcriptArea.insertBefore(phraseElement, transcriptArea.firstChild);
-        }
+        // CSS handles the visual order now, so we always just append.
+        transcriptArea.appendChild(phraseElement);
     }
     
     phraseElement.querySelector('.phrase-text').textContent = message.translatedText;
@@ -269,15 +265,16 @@ document.addEventListener('DOMContentLoaded', () => {
   
   function updateStatus(status, message) {
     connectionStatusLight.className = `status-light ${status}`;
-    if (statusMessage) statusMessage.textContent = message;
   }
 
   function handleScrollDirectionToggle() {
       resetHeaderCollapseTimer();
       state.scrollDirection = state.scrollDirection === 'down' ? 'up' : 'down';
+      
       const icon = scrollDirectionBtn.querySelector('.text-flow-icon');
       icon.innerHTML = state.scrollDirection === 'down' ? 'T&darr;' : 'T&uarr;';
       
+      // The CSS class now handles the visual reversal instantly.
       transcriptArea.classList.toggle('reversed', state.scrollDirection === 'up');
 
       if (state.scrollDirection === 'down') {
@@ -290,26 +287,26 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- All other UI and utility functions ---
   function populateLanguageSelect(selectElement, selectedLanguage) { if (!selectElement) return; selectElement.innerHTML = ''; Object.entries(languageMap).forEach(([code, name]) => { const option = document.createElement('option'); option.value = code; option.textContent = name; selectElement.appendChild(option); }); selectElement.value = selectedLanguage; }
   async function handleWakeLockButtonClick() { resetHeaderCollapseTimer(); if (screenWakeLock) { await releaseWakeLock(); } else { await requestWakeLock(); } }
-  async function requestWakeLock() { try { screenWakeLock = await navigator.wakeLock.request('screen'); wakeLockBtn.classList.add('active'); showNotification('Screen will stay on.', 'info'); screenWakeLock.addEventListener('release', () => { wakeLockBtn.classList.remove('active'); screenWakeLock = null; }); } catch (err) { showNotification('Could not activate screen lock.', 'error'); } }
+  async function requestWakeLock() { try { screenWakeLock = await navigator.wakeLock.request('screen'); wakeLockBtn.classList.add('active'); showNotification('Screen will stay on.', 'info'); screenWakeLock.addEventListener('release', () => { wakeLockBtn.classList.remove('active'); screenWakeLock = null; }); } catch (err) { wakeLockBtn.textContent = 'Wake Lock Failed'; showNotification('Could not activate screen lock.', 'error'); } }
   async function releaseWakeLock() { if (screenWakeLock) { await screenWakeLock.release(); screenWakeLock = null; showNotification('Screen lock released.', 'info'); } }
   function toggleContentVisibility() { resetHeaderCollapseTimer(); state.contentHidden = !state.contentHidden; mainContent.classList.toggle('transcript-hidden', state.contentHidden); collapseBtn.textContent = state.contentHidden ? 'View Text' : 'Hide Text'; }
   function toggleHeaderCollapseManual() { clearTimeout(state.headerCollapseTimeout); state.headerCollapsed = !state.headerCollapsed; appHeader.classList.toggle('collapsed', state.headerCollapsed); if (!state.headerCollapsed) { resetHeaderCollapseTimer(); } }
   function resetHeaderCollapseTimer() { clearTimeout(state.headerCollapseTimeout); if (state.headerCollapsed) { state.headerCollapsed = false; appHeader.classList.remove('collapsed'); } state.headerCollapseTimeout = setTimeout(() => { if (!state.headerCollapsed && document.visibilityState === 'visible') { state.headerCollapsed = true; appHeader.classList.add('collapsed'); } }, HEADER_AUTO_COLLAPSE_DELAY); }
   function isScrolledToTranscriptBottom() { if (!transcriptArea) return true; const { scrollTop, scrollHeight, clientHeight } = transcriptArea; if (clientHeight === 0) return true; return scrollHeight - Math.ceil(scrollTop) - clientHeight < 50; }
   function scrollToTranscriptBottom() { if (transcriptArea) { requestAnimationFrame(() => { transcriptArea.scrollTo({ top: transcriptArea.scrollHeight, behavior: 'smooth' }); }); state.userScrolledUp = false; state.newMessagesWhileScrolled = 0; scrollToBottomBtn.style.display = 'none'; } }
-  function handleTranscriptScroll() { if (!transcriptArea) return; const isNearBottom = isScrolledToTranscriptBottom(); if (state.scrollDirection === 'down') { if (!isNearBottom) { state.userScrolledUp = true; } else { state.userScrolledUp = false; state.newMessagesWhileScrolled = 0; scrollToBottomBtn.style.display = 'none'; } } }
+  function handleTranscriptScroll() { if (!transcriptArea) return; if (state.scrollDirection === 'down') { const isNearBottom = isScrolledToTranscriptBottom(); if (!isNearBottom) { state.userScrolledUp = true; } else { state.userScrolledUp = false; state.newMessagesWhileScrolled = 0; scrollToBottomBtn.style.display = 'none'; } } }
   function handleScrollToTranscriptBottomClick() { scrollToTranscriptBottom(); }
   function isValidSessionId(sessionId) { return /^[A-Z0-9]{4}-\d{4}$/.test(sessionId); }
   function formatSessionIdInput(event) { const input = event.target; let value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); let formattedValue = ""; if (value.length > 4) { formattedValue = value.slice(0, 4) + '-' + value.slice(4, 8); } else { formattedValue = value; } if (input.value !== formattedValue) { const start = input.selectionStart; const end = input.selectionEnd; const delta = formattedValue.length - input.value.length; input.value = formattedValue; try { input.setSelectionRange(start + delta, end + delta); } catch (e) {} } }
   function handleTempInputKeydown(event) { if (event.key === 'Enter') { event.preventDefault(); connect(); } }
   function maskSessionId(sessionId) { if (!sessionId || typeof sessionId !== 'string') { return "Unknown Session"; } const parts = sessionId.split('-'); if (parts.length !== 2 || parts[0].length !== 4 || parts[1].length !== 4) { return sessionId; } return `${parts[0].substring(0, 2)}XX-##${parts[1].substring(2, 4)}`; }
-  function loadFontSettings() { try { const settings = localStorage.getItem('wordlyViewerFontSettings'); if (settings) { const parsed = JSON.parse(settings); state.fontSize = parsed.size === 'large' ? 'large' : 'normal'; state.fontBold = !!parsed.bold; } } catch (e) {} }
+  function loadFontSettings() { try { const settings = localStorage.getItem('wordlyViewerFontSettings'); if (settings) { const parsed = JSON.parse(settings); state.fontSize = parsed.size === 'large' ? 'large' : 'normal'; state.fontBold = !!parsed.bold; } applyFontSettings(); } catch (e) {} }
   function applyFontSettings() { appPage.classList.remove('font-normal', 'font-large', 'font-bold'); appPage.classList.add(state.fontSize === 'large' ? 'font-large' : 'font-normal'); if (state.fontBold) appPage.classList.add('font-bold'); fontBoldToggleBtn.classList.toggle('active', state.fontBold); fontSizeIncreaseBtn.classList.toggle('active', state.fontSize === 'large'); fontSizeDecreaseBtn.classList.toggle('active', state.fontSize === 'normal'); fontBoldToggleBtn.style.fontWeight = state.fontBold ? 'normal' : 'bold'; }
   function saveFontSettings() { localStorage.setItem('wordlyViewerFontSettings', JSON.stringify({ size: state.fontSize, bold: state.fontBold })); }
   function handleFontSizeDecrease() { resetHeaderCollapseTimer(); if (state.fontSize !== 'normal') { state.fontSize = 'normal'; applyFontSettings(); saveFontSettings(); } }
   function handleFontSizeIncrease() { resetHeaderCollapseTimer(); if (state.fontSize !== 'large') { state.fontSize = 'large'; applyFontSettings(); saveFontSettings(); } }
   function handleFontBoldToggle() { resetHeaderCollapseTimer(); state.fontBold = !state.fontBold; applyFontSettings(); saveFontSettings(); }
-  function loadThemeSettings() { try { const themeSetting = localStorage.getItem('wordlyViewerTheme'); if (themeSetting) state.darkMode = themeSetting === 'dark'; } catch (e) {} }
+  function loadThemeSettings() { try { const themeSetting = localStorage.getItem('wordlyViewerTheme'); if (themeSetting) state.darkMode = themeSetting === 'dark'; applyTheme();} catch (e) {} }
   function applyTheme() { const themeValue = state.darkMode ? 'dark' : 'light'; document.documentElement.setAttribute('data-theme', themeValue); updateThemeIcons(themeToggleBtn); updateThemeIcons(loginThemeToggleBtn); }
   function updateThemeIcons(button) { if (!button) return; const moonIcon = button.querySelector('.moon-icon'); const sunIcon = button.querySelector('.sun-icon'); if (moonIcon && sunIcon) { if (state.darkMode) { moonIcon.style.display = 'none'; sunIcon.style.display = 'block'; } else { moonIcon.style.display = 'block'; sunIcon.style.display = 'none'; } } }
   function saveThemeSettings() { localStorage.setItem('wordlyViewerTheme', state.darkMode ? 'dark' : 'light'); }
