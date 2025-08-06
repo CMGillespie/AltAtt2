@@ -1,4 +1,4 @@
-// Wordly Secure Viewer Script (v13 - Final Pegged Scroll)
+// Wordly Secure Viewer Script (v14 - Definitive Scroll Fix)
 document.addEventListener('DOMContentLoaded', () => {
 
   if ('serviceWorker' in navigator) {
@@ -196,7 +196,12 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
             <div class="phrase-text"></div>`;
         
-        transcriptArea.appendChild(phraseElement);
+        // --- MODIFIED: Physically add to top or bottom ---
+        if (state.scrollDirection === 'down') {
+            transcriptArea.appendChild(phraseElement);
+        } else {
+            transcriptArea.insertBefore(phraseElement, transcriptArea.firstChild);
+        }
     }
     
     phraseElement.querySelector('.phrase-text').textContent = message.translatedText;
@@ -275,7 +280,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const icon = scrollDirectionBtn.querySelector('.text-flow-icon');
       icon.innerHTML = state.scrollDirection === 'down' ? 'T&darr;' : 'T&uarr;';
       
-      transcriptArea.classList.toggle('reversed', state.scrollDirection === 'up');
+      // --- MODIFIED: Manually reverse existing elements when toggling ---
+      const children = Array.from(transcriptArea.children);
+      children.reverse().forEach(child => transcriptArea.appendChild(child));
 
       if (state.scrollDirection === 'down') {
           scrollToTranscriptBottom();
@@ -293,22 +300,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function toggleHeaderCollapseManual() { clearTimeout(state.headerCollapseTimeout); state.headerCollapsed = !state.headerCollapsed; appHeader.classList.toggle('collapsed', state.headerCollapsed); if (!state.headerCollapsed) { resetHeaderCollapseTimer(); } }
   function resetHeaderCollapseTimer() { clearTimeout(state.headerCollapseTimeout); if (state.headerCollapsed) { state.headerCollapsed = false; appHeader.classList.remove('collapsed'); } state.headerCollapseTimeout = setTimeout(() => { if (!state.headerCollapsed && document.visibilityState === 'visible') { state.headerCollapsed = true; appHeader.classList.add('collapsed'); } }, HEADER_AUTO_COLLAPSE_DELAY); }
   function isScrolledToTranscriptBottom() { if (!transcriptArea) return true; const { scrollTop, scrollHeight, clientHeight } = transcriptArea; if (clientHeight === 0) return true; return scrollHeight - Math.ceil(scrollTop) - clientHeight < 50; }
-  
-  // --- MODIFIED: Direct, non-animated scrolling ---
-  function scrollToTranscriptBottom() {
-    if (transcriptArea) {
-      transcriptArea.scrollTop = transcriptArea.scrollHeight;
-      state.userScrolledUp = false;
-      state.newMessagesWhileScrolled = 0;
-      scrollToBottomBtn.style.display = 'none';
-    }
-  }
-  function scrollToTranscriptTop() {
-    if (transcriptArea) {
-      transcriptArea.scrollTop = 0;
-    }
-  }
-  
+  function scrollToTranscriptBottom() { if (transcriptArea) { transcriptArea.scrollTop = transcriptArea.scrollHeight; state.userScrolledUp = false; state.newMessagesWhileScrolled = 0; scrollToBottomBtn.style.display = 'none'; } }
+  function scrollToTranscriptTop() { if (transcriptArea) { transcriptArea.scrollTop = 0; } }
   function handleTranscriptScroll() { if (!transcriptArea) return; if (state.scrollDirection === 'down') { const isNearBottom = isScrolledToTranscriptBottom(); if (!isNearBottom) { state.userScrolledUp = true; } else { if (state.userScrolledUp) { state.userScrolledUp = false; state.newMessagesWhileScrolled = 0; scrollToBottomBtn.style.display = 'none'; } } } }
   function handleScrollToTranscriptBottomClick() { scrollToTranscriptBottom(); }
   function isValidSessionId(sessionId) { return /^[A-Z0-9]{4}-\d{4}$/.test(sessionId); }
@@ -324,7 +317,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function loadThemeSettings() { try { const themeSetting = localStorage.getItem('wordlyViewerTheme'); if (themeSetting) state.darkMode = themeSetting === 'dark'; applyTheme();} catch (e) {} }
   function applyTheme() { const themeValue = state.darkMode ? 'dark' : 'light'; document.documentElement.setAttribute('data-theme', themeValue); updateThemeIcons(themeToggleBtn); updateThemeIcons(loginThemeToggleBtn); }
   function updateThemeIcons(button) { if (!button) return; const moonIcon = button.querySelector('.moon-icon'); const sunIcon = button.querySelector('.sun-icon'); if (moonIcon && sunIcon) { if (state.darkMode) { moonIcon.style.display = 'none'; sunIcon.style.display = 'block'; } else { moonIcon.style.display = 'block'; sunIcon.style.display = 'none'; } } }
-  function saveFontSettings() { localStorage.setItem('wordlyViewerTheme', state.darkMode ? 'dark' : 'light'); }
+  function saveThemeSettings() { localStorage.setItem('wordlyViewerTheme', state.darkMode ? 'dark' : 'light'); }
   function toggleTheme() { state.darkMode = !state.darkMode; applyTheme(); saveThemeSettings(); showNotification(`${state.darkMode ? 'Dark' : 'Light'} mode enabled`, 'info'); }
   function showNotification(message, type = 'info') { const existing = document.querySelector('.notification'); if (existing) existing.remove(); const notification = document.createElement('div'); notification.className = `notification ${type}`; notification.textContent = message; document.body.appendChild(notification); requestAnimationFrame(() => { notification.classList.add('visible'); }); const notificationDuration = 3000; setTimeout(() => { notification.classList.remove('visible'); setTimeout(() => notification.remove(), 500); }, notificationDuration - 500); }
 });
