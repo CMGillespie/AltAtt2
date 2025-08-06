@@ -1,4 +1,4 @@
-// Wordly Secure Viewer Script (v11 - Final Scroll Fix)
+// Wordly Secure Viewer Script (v12 - Final Scroll Fix)
 document.addEventListener('DOMContentLoaded', () => {
 
   if ('serviceWorker' in navigator) {
@@ -201,16 +201,19 @@ document.addEventListener('DOMContentLoaded', () => {
     
     phraseElement.querySelector('.phrase-text').textContent = message.translatedText;
 
+    // --- MODIFIED: Final Scrolling Logic ---
     if (message.isFinal) {
-        // --- MODIFIED: Simplified and corrected scrolling logic ---
         if (state.scrollDirection === 'up') {
+            // In reverse mode, we always scroll to the top to see the newest message.
             scrollToTranscriptTop();
-        } else if (isUserNearBottom) { // Only scroll down if user is already at the bottom
+        } else if (isUserNearBottom) {
+            // In standard mode, only scroll if the user is already at the bottom.
             scrollToTranscriptBottom();
-        } else { // Otherwise, show the "new messages" button
-             state.newMessagesWhileScrolled++;
-             newMessageCountSpan.textContent = `(${state.newMessagesWhileScrolled})`;
-             scrollToBottomBtn.style.display = 'flex';
+        } else {
+            // If user has scrolled up in standard mode, show the "new messages" button.
+            state.newMessagesWhileScrolled++;
+            newMessageCountSpan.textContent = `(${state.newMessagesWhileScrolled})`;
+            scrollToBottomBtn.style.display = 'flex';
         }
     }
   }
