@@ -1,4 +1,4 @@
-// Wordly Secure Viewer Script (v12 - Final Scroll Fix)
+// Wordly Secure Viewer Script (v14 - Final Pegged Scroll)
 document.addEventListener('DOMContentLoaded', () => {
 
   if ('serviceWorker' in navigator) {
@@ -183,7 +183,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function handlePhrase(message) {
-    const isUserNearBottom = isScrolledToTranscriptBottom();
     let phraseElement = document.getElementById(`phrase-${message.phraseId}`);
     
     if (!phraseElement) {
@@ -208,12 +207,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (message.isFinal) {
         if (state.scrollDirection === 'up') {
             scrollToTranscriptTop();
-        } else if (isUserNearBottom) {
-            scrollToTranscriptBottom();
         } else {
-            state.newMessagesWhileScrolled++;
-            newMessageCountSpan.textContent = `(${state.newMessagesWhileScrolled})`;
-            scrollToBottomBtn.style.display = 'flex';
+            // In standard 'down' mode, only auto-scroll if the user hasn't scrolled up.
+            if (!state.userScrolledUp) {
+                scrollToTranscriptBottom();
+            } else {
+                state.newMessagesWhileScrolled++;
+                newMessageCountSpan.textContent = `(${state.newMessagesWhileScrolled})`;
+                scrollToBottomBtn.style.display = 'flex';
+            }
         }
     }
   }
@@ -297,10 +299,47 @@ document.addEventListener('DOMContentLoaded', () => {
   function toggleContentVisibility() { resetHeaderCollapseTimer(); state.contentHidden = !state.contentHidden; mainContent.classList.toggle('transcript-hidden', state.contentHidden); collapseBtn.textContent = state.contentHidden ? 'View Text' : 'Hide Text'; }
   function toggleHeaderCollapseManual() { clearTimeout(state.headerCollapseTimeout); state.headerCollapsed = !state.headerCollapsed; appHeader.classList.toggle('collapsed', state.headerCollapsed); if (!state.headerCollapsed) { resetHeaderCollapseTimer(); } }
   function resetHeaderCollapseTimer() { clearTimeout(state.headerCollapseTimeout); if (state.headerCollapsed) { state.headerCollapsed = false; appHeader.classList.remove('collapsed'); } state.headerCollapseTimeout = setTimeout(() => { if (!state.headerCollapsed && document.visibilityState === 'visible') { state.headerCollapsed = true; appHeader.classList.add('collapsed'); } }, HEADER_AUTO_COLLAPSE_DELAY); }
-  function isScrolledToTranscriptBottom() { if (!transcriptArea) return true; const { scrollTop, scrollHeight, clientHeight } = transcriptArea; if (clientHeight === 0) return true; return scrollHeight - Math.ceil(scrollTop) - clientHeight < 50; }
-  function scrollToTranscriptBottom() { if (transcriptArea) { transcriptArea.scrollTop = transcriptArea.scrollHeight; state.userScrolledUp = false; state.newMessagesWhileScrolled = 0; scrollToBottomBtn.style.display = 'none'; } }
-  function scrollToTranscriptTop() { if (transcriptArea) { transcriptArea.scrollTop = 0; } }
-  function handleTranscriptScroll() { if (!transcriptArea) return; if (state.scrollDirection === 'down') { const isNearBottom = isScrolledToTranscriptBottom(); if (!isNearBottom) { state.userScrolledUp = true; } else { if (state.userScrolledUp) { state.userScrolledUp = false; state.newMessagesWhileScrolled = 0; scrollToBottomBtn.style.display = 'none'; } } } }
+  
+  // --- MODIFIED: Renamed from isScrolledToTranscriptBottom for clarity ---
+  function isUserAtBottom() {
+    if (!transcriptArea) return true;
+    const { scrollTop, scrollHeight, clientHeight } = transcriptArea;
+    // The threshold (e.g., 50 pixels) can be adjusted if needed
+    return scrollHeight - Math.ceil(scrollTop) - clientHeight < 50;
+  }
+  
+  function scrollToTranscriptBottom() { 
+    if (transcriptArea) { 
+        requestAnimationFrame(() => {
+            transcriptArea.scrollTop = transcriptArea.scrollHeight;
+        });
+        state.userScrolledUp = false; 
+        state.newMessagesWhileScrolled = 0; 
+        scrollToBottomBtn.style.display = 'none'; 
+    } 
+  }
+  function scrollToTranscriptTop() { 
+    if (transcriptArea) { 
+        requestAnimationFrame(() => {
+            transcriptArea.scrollTop = 0;
+        });
+    } 
+  }
+  
+  // --- MODIFIED: Simplified scroll handling logic ---
+  function handleTranscriptScroll() {
+    if (!transcriptArea || state.scrollDirection === 'up') {
+        // We only track this for the standard 'down' direction
+        return;
+    }
+    // If user is at the bottom, reset the flag. Otherwise, set it.
+    state.userScrolledUp = !isUserAtBottom();
+    if (!state.userScrolledUp) {
+        state.newMessagesWhileScrolled = 0;
+        scrollToBottomBtn.style.display = 'none';
+    }
+  }
+
   function handleScrollToTranscriptBottomClick() { scrollToTranscriptBottom(); }
   function isValidSessionId(sessionId) { return /^[A-Z0-9]{4}-\d{4}$/.test(sessionId); }
   function formatSessionIdInput(event) { const input = event.target; let value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); let formattedValue = ""; if (value.length > 4) { formattedValue = value.slice(0, 4) + '-' + value.slice(4, 8); } else { formattedValue = value; } if (input.value !== formattedValue) { const start = input.selectionStart; const end = input.selectionEnd; const delta = formattedValue.length - input.value.length; input.value = formattedValue; try { input.setSelectionRange(start + delta, end + delta); } catch (e) {} } }
