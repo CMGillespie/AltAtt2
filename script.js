@@ -1,4 +1,4 @@
-// Wordly Secure Viewer Script (v14 - Final Pegged Scroll)
+// Wordly Secure Viewer Script (v15 - RTL Support)
 document.addEventListener('DOMContentLoaded', () => {
 
   if ('serviceWorker' in navigator) {
@@ -48,6 +48,10 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const languageMap = { 'af': 'Afrikaans', 'sq': 'Albanian', 'ar': 'Arabic', 'hy': 'Armenian', 'bn': 'Bengali', 'bg': 'Bulgarian', 'zh-HK': 'Cantonese', 'ca': 'Catalan', 'zh-CN': 'Chinese (Simplified)', 'zh-TW': 'Chinese (Traditional)', 'hr': 'Croatian', 'cs': 'Czech', 'da': 'Danish', 'nl': 'Dutch', 'en': 'English (US)', 'en-AU': 'English (AU)', 'en-GB': 'English (UK)', 'et': 'Estonian', 'fi': 'Finnish', 'fr': 'French (FR)', 'fr-CA': 'French (CA)', 'ka': 'Georgian', 'de': 'German', 'el': 'Greek', 'gu': 'Gujarati', 'he': 'Hebrew', 'hi': 'Hindi', 'hu': 'Hungarian', 'is': 'Icelandic', 'id': 'Indonesian', 'ga': 'Irish', 'it': 'Italian', 'ja': 'Japanese', 'kn': 'Kannada', 'ko': 'Korean', 'lv': 'Latvian', 'lt': 'Lithuanian', 'mk': 'Macedonian', 'ms': 'Malay', 'mt': 'Maltese', 'no': 'Norwegian', 'fa': 'Persian', 'pl': 'Polish', 'pt': 'Portuguese (PT)', 'pt-BR': 'Portuguese (BR)', 'ro': 'Romanian', 'ru': 'Russian', 'sr': 'Serbian', 'sk': 'Slovak', 'sl': 'Slovenian', 'es': 'Spanish (ES)', 'es-MX': 'Spanish (MX)', 'sv': 'Swedish', 'tl': 'Tagalog', 'th': 'Thai', 'tr': 'Turkish', 'uk': 'Ukrainian', 'vi': 'Vietnamese', 'cy': 'Welsh', 'pa': 'Punjabi', 'sw': 'Swahili', 'ta': 'Tamil', 'ur': 'Urdu', 'zh': 'Chinese' };
+  
+  // --- NEW: List of Right-to-Left language codes ---
+  const rtlLanguages = ['ar', 'he', 'fa', 'ur', 'dv', 'ps', 'yi'];
+  
   const HEADER_AUTO_COLLAPSE_DELAY = 10000;
 
   // --- Initialization ---
@@ -98,6 +102,10 @@ document.addEventListener('DOMContentLoaded', () => {
         sessionDisplayHeader.textContent = `Session: ${maskSessionId(state.sessionId)}`;
     }
     populateLanguageSelect(languageSelect, 'en');
+    
+    // Set initial text direction
+    setTextDirectionForCurrentLanguage();
+
     resetHeaderCollapseTimer();
     connectWebSocket();
   }
@@ -127,6 +135,10 @@ document.addEventListener('DOMContentLoaded', () => {
   function handleLanguageChange() {
     resetHeaderCollapseTimer();
     const newLanguage = languageSelect.value;
+    
+    // --- NEW: Update text direction on language change ---
+    setTextDirectionForCurrentLanguage();
+
     if (state.websocket && state.websocket.readyState === WebSocket.OPEN) {
         const wasAudioEnabled = state.audioEnabled;
         if(wasAudioEnabled) sendVoiceRequest(false);
@@ -134,6 +146,19 @@ document.addEventListener('DOMContentLoaded', () => {
         state.websocket.send(JSON.stringify({ type: 'change', languageCode: newLanguage }));
         if(wasAudioEnabled) setTimeout(() => sendVoiceRequest(true), 500);
     }
+  }
+
+  // --- NEW: Function to apply RTL styling to all existing phrases ---
+  function setTextDirectionForCurrentLanguage() {
+    const isRtl = rtlLanguages.includes(languageSelect.value);
+    const phrases = transcriptArea.querySelectorAll('.phrase');
+    phrases.forEach(phrase => {
+      if (isRtl) {
+        phrase.classList.add('rtl');
+      } else {
+        phrase.classList.remove('rtl');
+      }
+    });
   }
 
   function connectWebSocket() {
@@ -183,12 +208,19 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function handlePhrase(message) {
+    const isUserNearBottom = isScrolledToTranscriptBottom();
     let phraseElement = document.getElementById(`phrase-${message.phraseId}`);
     
     if (!phraseElement) {
         phraseElement = document.createElement('div');
         phraseElement.id = `phrase-${message.phraseId}`;
         phraseElement.className = 'phrase';
+
+        // --- NEW: Apply RTL class to new phrases if needed ---
+        if (rtlLanguages.includes(languageSelect.value)) {
+          phraseElement.classList.add('rtl');
+        }
+
         phraseElement.innerHTML = `
             <div class="phrase-header">
                 <span class="speaker-name">${message.name || `Speaker ${message.speakerId.slice(-4)}`}</span>
@@ -207,14 +239,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (message.isFinal) {
         if (state.scrollDirection === 'up') {
             scrollToTranscriptTop();
+        } else if (isUserNearBottom) {
+            scrollToTranscriptBottom();
         } else {
-            if (!state.userScrolledUp) {
-                scrollToTranscriptBottom();
-            } else {
-                state.newMessagesWhileScrolled++;
-                newMessageCountSpan.textContent = `(${state.newMessagesWhileScrolled})`;
-                scrollToBottomBtn.style.display = 'flex';
-            }
+            state.newMessagesWhileScrolled++;
+            newMessageCountSpan.textContent = `(${state.newMessagesWhileScrolled})`;
+            scrollToBottomBtn.style.display = 'flex';
         }
     }
   }
@@ -298,45 +328,11 @@ document.addEventListener('DOMContentLoaded', () => {
   function toggleContentVisibility() { resetHeaderCollapseTimer(); state.contentHidden = !state.contentHidden; mainContent.classList.toggle('transcript-hidden', state.contentHidden); collapseBtn.textContent = state.contentHidden ? 'View Text' : 'Hide Text'; }
   function toggleHeaderCollapseManual() { clearTimeout(state.headerCollapseTimeout); state.headerCollapsed = !state.headerCollapsed; appHeader.classList.toggle('collapsed', state.headerCollapsed); if (!state.headerCollapsed) { resetHeaderCollapseTimer(); } }
   function resetHeaderCollapseTimer() { clearTimeout(state.headerCollapseTimeout); if (state.headerCollapsed) { state.headerCollapsed = false; appHeader.classList.remove('collapsed'); } state.headerCollapseTimeout = setTimeout(() => { if (!state.headerCollapsed && document.visibilityState === 'visible') { state.headerCollapsed = true; appHeader.classList.add('collapsed'); } }, HEADER_AUTO_COLLAPSE_DELAY); }
-  
-  function isScrolledToTranscriptBottom() {
-    if (!transcriptArea) return true;
-    const { scrollTop, scrollHeight, clientHeight } = transcriptArea;
-    return scrollHeight - Math.ceil(scrollTop) - clientHeight < 50;
-  }
-  
-  function scrollToTranscriptBottom() { 
-    if (transcriptArea) { 
-        requestAnimationFrame(() => {
-            transcriptArea.scrollTop = transcriptArea.scrollHeight;
-        });
-    } 
-  }
-  function scrollToTranscriptTop() { 
-    if (transcriptArea) { 
-        requestAnimationFrame(() => {
-            transcriptArea.scrollTop = 0;
-        });
-    } 
-  }
-  
-  function handleTranscriptScroll() {
-    if (!transcriptArea || state.scrollDirection === 'up') {
-        state.userScrolledUp = false; // Reset flag in 'up' mode
-        return;
-    }
-    state.userScrolledUp = !isScrolledToTranscriptBottom();
-    if (!state.userScrolledUp) {
-        state.newMessagesWhileScrolled = 0;
-        scrollToBottomBtn.style.display = 'none';
-    }
-  }
-
-  function handleScrollToTranscriptBottomClick() {
-      state.userScrolledUp = false; // Set flag to false so auto-scroll resumes
-      scrollToTranscriptBottom(); 
-  }
-
+  function isScrolledToTranscriptBottom() { if (!transcriptArea) return true; const { scrollTop, scrollHeight, clientHeight } = transcriptArea; if (clientHeight === 0) return true; return scrollHeight - Math.ceil(scrollTop) - clientHeight < 50; }
+  function scrollToTranscriptBottom() { if (transcriptArea) { requestAnimationFrame(() => { transcriptArea.scrollTop = transcriptArea.scrollHeight; }); state.userScrolledUp = false; state.newMessagesWhileScrolled = 0; scrollToBottomBtn.style.display = 'none'; } }
+  function scrollToTranscriptTop() { if (transcriptArea) { requestAnimationFrame(() => { transcriptArea.scrollTop = 0; }); } }
+  function handleTranscriptScroll() { if (!transcriptArea) return; if (state.scrollDirection === 'down') { const isNearBottom = isScrolledToTranscriptBottom(); if (!isNearBottom) { state.userScrolledUp = true; } else { if (state.userScrolledUp) { state.userScrolledUp = false; state.newMessagesWhileScrolled = 0; scrollToBottomBtn.style.display = 'none'; } } } }
+  function handleScrollToTranscriptBottomClick() { scrollToTranscriptBottom(); }
   function isValidSessionId(sessionId) { return /^[A-Z0-9]{4}-\d{4}$/.test(sessionId); }
   function formatSessionIdInput(event) { const input = event.target; let value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); let formattedValue = ""; if (value.length > 4) { formattedValue = value.slice(0, 4) + '-' + value.slice(4, 8); } else { formattedValue = value; } if (input.value !== formattedValue) { const start = input.selectionStart; const end = input.selectionEnd; const delta = formattedValue.length - input.value.length; input.value = formattedValue; try { input.setSelectionRange(start + delta, end + delta); } catch (e) {} } }
   function handleTempInputKeydown(event) { if (event.key === 'Enter') { event.preventDefault(); connect(); } }
@@ -350,7 +346,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function loadThemeSettings() { try { const themeSetting = localStorage.getItem('wordlyViewerTheme'); if (themeSetting) state.darkMode = themeSetting === 'dark'; applyTheme();} catch (e) {} }
   function applyTheme() { const themeValue = state.darkMode ? 'dark' : 'light'; document.documentElement.setAttribute('data-theme', themeValue); updateThemeIcons(themeToggleBtn); updateThemeIcons(loginThemeToggleBtn); }
   function updateThemeIcons(button) { if (!button) return; const moonIcon = button.querySelector('.moon-icon'); const sunIcon = button.querySelector('.sun-icon'); if (moonIcon && sunIcon) { if (state.darkMode) { moonIcon.style.display = 'none'; sunIcon.style.display = 'block'; } else { moonIcon.style.display = 'block'; sunIcon.style.display = 'none'; } } }
-  function saveThemeSettings() { localStorage.setItem('wordlyViewerTheme', state.darkMode ? 'dark' : 'light'); }
+  function saveFontSettings() { localStorage.setItem('wordlyViewerTheme', state.darkMode ? 'dark' : 'light'); }
   function toggleTheme() { state.darkMode = !state.darkMode; applyTheme(); saveThemeSettings(); showNotification(`${state.darkMode ? 'Dark' : 'Light'} mode enabled`, 'info'); }
   function showNotification(message, type = 'info') { const existing = document.querySelector('.notification'); if (existing) existing.remove(); const notification = document.createElement('div'); notification.className = `notification ${type}`; notification.textContent = message; document.body.appendChild(notification); requestAnimationFrame(() => { notification.classList.add('visible'); }); const notificationDuration = 3000; setTimeout(() => { notification.classList.remove('visible'); setTimeout(() => notification.remove(), 500); }, notificationDuration - 500); }
 });
