@@ -778,6 +778,39 @@ input:focus-visible + .slider {
   fill: var(--success-color); /* Bright green when on */
 }
 
+/* --- ADD OR REPLACE THESE STYLES for the sticky header --- */
+
+/* App Layout - Make the whole page a non-scrolling flex container */
+#app-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh; /* Full viewport height */
+  overflow: hidden; /* Prevent the page itself from scrolling */
+}
+
+/* Header - Keep the header at the top */
+.app-header {
+  flex-shrink: 0; /* Prevent the header from shrinking */
+  position: relative; /* Keep z-index working for the toggle button */
+  z-index: 20;
+}
+
+/* Main Content Area - This container now handles the scrolling */
+.main-content {
+  flex-grow: 1; /* Take up all remaining vertical space */
+  overflow-y: auto; /* Allow this area to scroll vertically */
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+}
+
+/* Transcript Area - Let it grow to fill the main content area */
+.transcript-area {
+  flex-grow: 1;
+}
+
+
+/* --- THE REST OF YOUR CSS IS UNCHANGED --- */
 
 /* --- THE REST OF YOUR CSS IS UNCHANGED --- */
 
