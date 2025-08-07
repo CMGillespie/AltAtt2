@@ -1,4 +1,4 @@
-// Wordly Secure Viewer Script (v15 - RTL Support)
+// Wordly Secure Viewer Script (v16 - Final UI Logic)
 document.addEventListener('DOMContentLoaded', () => {
 
   if ('serviceWorker' in navigator) {
@@ -31,8 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const mainContent = document.getElementById('main-content');
   const scrollToBottomBtn = document.getElementById('scroll-to-bottom-btn');
   const newMessageCountSpan = document.getElementById('new-message-count');
-  const fontSizeDecreaseBtn = document.getElementById('font-size-decrease-btn');
-  const fontSizeIncreaseBtn = document.getElementById('font-size-increase-btn');
+  const fontSizeToggleBtn = document.getElementById('font-size-toggle-btn');
   const fontBoldToggleBtn = document.getElementById('font-bold-toggle-btn');
   
   let screenWakeLock = null;
@@ -48,10 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const languageMap = { 'af': 'Afrikaans', 'sq': 'Albanian', 'ar': 'Arabic', 'hy': 'Armenian', 'bn': 'Bengali', 'bg': 'Bulgarian', 'zh-HK': 'Cantonese', 'ca': 'Catalan', 'zh-CN': 'Chinese (Simplified)', 'zh-TW': 'Chinese (Traditional)', 'hr': 'Croatian', 'cs': 'Czech', 'da': 'Danish', 'nl': 'Dutch', 'en': 'English (US)', 'en-AU': 'English (AU)', 'en-GB': 'English (UK)', 'et': 'Estonian', 'fi': 'Finnish', 'fr': 'French (FR)', 'fr-CA': 'French (CA)', 'ka': 'Georgian', 'de': 'German', 'el': 'Greek', 'gu': 'Gujarati', 'he': 'Hebrew', 'hi': 'Hindi', 'hu': 'Hungarian', 'is': 'Icelandic', 'id': 'Indonesian', 'ga': 'Irish', 'it': 'Italian', 'ja': 'Japanese', 'kn': 'Kannada', 'ko': 'Korean', 'lv': 'Latvian', 'lt': 'Lithuanian', 'mk': 'Macedonian', 'ms': 'Malay', 'mt': 'Maltese', 'no': 'Norwegian', 'fa': 'Persian', 'pl': 'Polish', 'pt': 'Portuguese (PT)', 'pt-BR': 'Portuguese (BR)', 'ro': 'Romanian', 'ru': 'Russian', 'sr': 'Serbian', 'sk': 'Slovak', 'sl': 'Slovenian', 'es': 'Spanish (ES)', 'es-MX': 'Spanish (MX)', 'sv': 'Swedish', 'tl': 'Tagalog', 'th': 'Thai', 'tr': 'Turkish', 'uk': 'Ukrainian', 'vi': 'Vietnamese', 'cy': 'Welsh', 'pa': 'Punjabi', 'sw': 'Swahili', 'ta': 'Tamil', 'ur': 'Urdu', 'zh': 'Chinese' };
-  
-  // --- NEW: List of Right-to-Left language codes ---
   const rtlLanguages = ['ar', 'he', 'fa', 'ur', 'dv', 'ps', 'yi'];
-  
   const HEADER_AUTO_COLLAPSE_DELAY = 10000;
 
   // --- Initialization ---
@@ -82,8 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loginThemeToggleBtn.addEventListener('click', toggleTheme);
     transcriptArea.addEventListener('scroll', handleTranscriptScroll);
     scrollToBottomBtn.addEventListener('click', handleScrollToTranscriptBottomClick);
-    fontSizeDecreaseBtn.addEventListener('click', handleFontSizeDecrease);
-    fontSizeIncreaseBtn.addEventListener('click', handleFontSizeIncrease);
+    fontSizeToggleBtn.addEventListener('click', handleFontSizeToggle);
     fontBoldToggleBtn.addEventListener('click', handleFontBoldToggle);
   }
 
@@ -103,9 +98,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     populateLanguageSelect(languageSelect, 'en');
     
-    // Set initial text direction
-    setTextDirectionForCurrentLanguage();
-
     resetHeaderCollapseTimer();
     connectWebSocket();
   }
@@ -135,10 +127,6 @@ document.addEventListener('DOMContentLoaded', () => {
   function handleLanguageChange() {
     resetHeaderCollapseTimer();
     const newLanguage = languageSelect.value;
-    
-    // --- NEW: Update text direction on language change ---
-    setTextDirectionForCurrentLanguage();
-
     if (state.websocket && state.websocket.readyState === WebSocket.OPEN) {
         const wasAudioEnabled = state.audioEnabled;
         if(wasAudioEnabled) sendVoiceRequest(false);
@@ -146,19 +134,6 @@ document.addEventListener('DOMContentLoaded', () => {
         state.websocket.send(JSON.stringify({ type: 'change', languageCode: newLanguage }));
         if(wasAudioEnabled) setTimeout(() => sendVoiceRequest(true), 500);
     }
-  }
-
-  // --- NEW: Function to apply RTL styling to all existing phrases ---
-  function setTextDirectionForCurrentLanguage() {
-    const isRtl = rtlLanguages.includes(languageSelect.value);
-    const phrases = transcriptArea.querySelectorAll('.phrase');
-    phrases.forEach(phrase => {
-      if (isRtl) {
-        phrase.classList.add('rtl');
-      } else {
-        phrase.classList.remove('rtl');
-      }
-    });
   }
 
   function connectWebSocket() {
@@ -207,6 +182,7 @@ document.addEventListener('DOMContentLoaded', () => {
     state.websocket.onerror = () => updateStatus('error');
   }
 
+  // --- MODIFIED: RTL logic updated ---
   function handlePhrase(message) {
     const isUserNearBottom = isScrolledToTranscriptBottom();
     let phraseElement = document.getElementById(`phrase-${message.phraseId}`);
@@ -215,8 +191,8 @@ document.addEventListener('DOMContentLoaded', () => {
         phraseElement = document.createElement('div');
         phraseElement.id = `phrase-${message.phraseId}`;
         phraseElement.className = 'phrase';
-
-        // --- NEW: Apply RTL class to new phrases if needed ---
+        
+        // Stamp the phrase with the current direction
         if (rtlLanguages.includes(languageSelect.value)) {
           phraseElement.classList.add('rtl');
         }
@@ -337,16 +313,18 @@ document.addEventListener('DOMContentLoaded', () => {
   function formatSessionIdInput(event) { const input = event.target; let value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); let formattedValue = ""; if (value.length > 4) { formattedValue = value.slice(0, 4) + '-' + value.slice(4, 8); } else { formattedValue = value; } if (input.value !== formattedValue) { const start = input.selectionStart; const end = input.selectionEnd; const delta = formattedValue.length - input.value.length; input.value = formattedValue; try { input.setSelectionRange(start + delta, end + delta); } catch (e) {} } }
   function handleTempInputKeydown(event) { if (event.key === 'Enter') { event.preventDefault(); connect(); } }
   function maskSessionId(sessionId) { if (!sessionId || typeof sessionId !== 'string') { return "Unknown Session"; } const parts = sessionId.split('-'); if (parts.length !== 2 || parts[0].length !== 4 || parts[1].length !== 4) { return sessionId; } return `${parts[0].substring(0, 2)}XX-##${parts[1].substring(2, 4)}`; }
-  function loadFontSettings() { try { const settings = localStorage.getItem('wordlyViewerFontSettings'); if (settings) { const parsed = JSON.parse(settings); state.fontSize = parsed.size === 'large' ? 'large' : 'normal'; state.fontBold = !!parsed.bold; } applyFontSettings(); } catch (e) {} }
-  function applyFontSettings() { appPage.classList.remove('font-normal', 'font-large', 'font-bold'); appPage.classList.add(state.fontSize === 'large' ? 'font-large' : 'font-normal'); if (state.fontBold) appPage.classList.add('font-bold'); fontBoldToggleBtn.classList.toggle('active', state.fontBold); fontSizeIncreaseBtn.classList.toggle('active', state.fontSize === 'large'); fontSizeDecreaseBtn.classList.toggle('active', state.fontSize === 'normal'); fontBoldToggleBtn.style.fontWeight = state.fontBold ? 'normal' : 'bold'; }
+  
+  // --- MODIFIED: Font logic updated ---
+  function loadFontSettings() { try { const settings = localStorage.getItem('wordlyViewerFontSettings'); if (settings) { const parsed = JSON.parse(settings); state.fontSize = parsed.size === 'large' ? 'large' : 'normal'; state.fontBold = !!parsed.bold; } } catch (e) { state.fontSize = 'normal'; state.fontBold = false; } applyFontSettings(); }
+  function applyFontSettings() { appPage.classList.remove('font-normal', 'font-large', 'font-bold'); appPage.classList.add(state.fontSize === 'large' ? 'font-large' : 'font-normal'); if (state.fontBold) appPage.classList.add('font-bold'); const smallA = fontSizeToggleBtn.querySelector('.small'); const largeA = fontSizeToggleBtn.querySelector('.large'); if (state.fontSize === 'normal') { smallA.style.display = 'none'; largeA.style.display = 'inline'; } else { smallA.style.display = 'inline'; largeA.style.display = 'none'; } fontBoldToggleBtn.style.fontWeight = state.fontBold ? 'normal' : 'bold'; }
   function saveFontSettings() { localStorage.setItem('wordlyViewerFontSettings', JSON.stringify({ size: state.fontSize, bold: state.fontBold })); }
-  function handleFontSizeDecrease() { resetHeaderCollapseTimer(); if (state.fontSize !== 'normal') { state.fontSize = 'normal'; applyFontSettings(); saveFontSettings(); } }
-  function handleFontSizeIncrease() { resetHeaderCollapseTimer(); if (state.fontSize !== 'large') { state.fontSize = 'large'; applyFontSettings(); saveFontSettings(); } }
+  function handleFontSizeToggle() { resetHeaderCollapseTimer(); state.fontSize = state.fontSize === 'normal' ? 'large' : 'normal'; applyFontSettings(); saveFontSettings(); }
   function handleFontBoldToggle() { resetHeaderCollapseTimer(); state.fontBold = !state.fontBold; applyFontSettings(); saveFontSettings(); }
+
   function loadThemeSettings() { try { const themeSetting = localStorage.getItem('wordlyViewerTheme'); if (themeSetting) state.darkMode = themeSetting === 'dark'; applyTheme();} catch (e) {} }
   function applyTheme() { const themeValue = state.darkMode ? 'dark' : 'light'; document.documentElement.setAttribute('data-theme', themeValue); updateThemeIcons(themeToggleBtn); updateThemeIcons(loginThemeToggleBtn); }
   function updateThemeIcons(button) { if (!button) return; const moonIcon = button.querySelector('.moon-icon'); const sunIcon = button.querySelector('.sun-icon'); if (moonIcon && sunIcon) { if (state.darkMode) { moonIcon.style.display = 'none'; sunIcon.style.display = 'block'; } else { moonIcon.style.display = 'block'; sunIcon.style.display = 'none'; } } }
-  function saveFontSettings() { localStorage.setItem('wordlyViewerTheme', state.darkMode ? 'dark' : 'light'); }
+  function saveThemeSettings() { localStorage.setItem('wordlyViewerTheme', state.darkMode ? 'dark' : 'light'); }
   function toggleTheme() { state.darkMode = !state.darkMode; applyTheme(); saveThemeSettings(); showNotification(`${state.darkMode ? 'Dark' : 'Light'} mode enabled`, 'info'); }
   function showNotification(message, type = 'info') { const existing = document.querySelector('.notification'); if (existing) existing.remove(); const notification = document.createElement('div'); notification.className = `notification ${type}`; notification.textContent = message; document.body.appendChild(notification); requestAnimationFrame(() => { notification.classList.add('visible'); }); const notificationDuration = 3000; setTimeout(() => { notification.classList.remove('visible'); setTimeout(() => notification.remove(), 500); }, notificationDuration - 500); }
 });
