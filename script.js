@@ -1,323 +1,347 @@
-// Wordly Secure Viewer Script (v14 - Definitive Scroll Fix)
+// Wordly Babelfish - Isolate & Orchestrate Strategy with DEBUG LOGGING
 document.addEventListener('DOMContentLoaded', () => {
-
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js')
-      .then(reg => console.log('Service Worker registered.'))
-      .catch(err => console.error('Service Worker registration failed:', err));
-  }
-
-  // --- DOM Elements ---
-  const configInputArea = document.getElementById('config-input-area');
-  const tempSessionIdInput = document.getElementById('temp-session-id');
-  const tempPasscodeInput = document.getElementById('temp-passcode');
-  const tempConnectBtn = document.getElementById('temp-connect-btn');
-  const tempStatus = document.getElementById('temp-status');
-  const appPage = document.getElementById('app-page');
-  const sessionDisplayHeader = document.getElementById('session-display-header');
-  const languageSelect = document.getElementById('language-select');
-  const audioToggle = document.getElementById('audio-toggle');
-  const disconnectBtn = document.getElementById('disconnect-btn');
-  const transcriptArea = document.getElementById('transcript-area');
-  const connectionStatusLight = document.getElementById('connection-status');
-  const wakeLockBtn = document.getElementById('wake-lock-btn');
-  const mainAudioPlayer = document.getElementById('main-audio-player');
-  const scrollDirectionBtn = document.getElementById('scroll-direction-btn');
-  const appHeader = document.getElementById('app-header');
-  const headerToggleButton = document.getElementById('header-toggle-btn');
-  const themeToggleBtn = document.getElementById('theme-toggle-btn');
-  const loginThemeToggleBtn = document.getElementById('login-theme-toggle-btn');
-  const collapseBtn = document.getElementById('collapse-btn');
-  const mainContent = document.getElementById('main-content');
-  const scrollToBottomBtn = document.getElementById('scroll-to-bottom-btn');
-  const newMessageCountSpan = document.getElementById('new-message-count');
-  const fontSizeDecreaseBtn = document.getElementById('font-size-decrease-btn');
-  const fontSizeIncreaseBtn = document.getElementById('font-size-increase-btn');
-  const fontBoldToggleBtn = document.getElementById('font-bold-toggle-btn');
-  
-  let screenWakeLock = null;
-
-  // --- Application State ---
-  const state = {
-    sessionId: null, passcode: '', websocket: null, audioEnabled: false,
-    isPlayingAudio: false, audioQueue: [], reconnectInterval: null,
-    isDeliberateDisconnect: false, scrollDirection: 'down',
-    headerCollapsed: false, headerCollapseTimeout: null, contentHidden: false,
-    userScrolledUp: false, newMessagesWhileScrolled: 0, fontSize: 'normal',
-    fontBold: false, darkMode: false,
-  };
-
-  const languageMap = { 'af': 'Afrikaans', 'sq': 'Albanian', 'ar': 'Arabic', 'hy': 'Armenian', 'bn': 'Bengali', 'bg': 'Bulgarian', 'zh-HK': 'Cantonese', 'ca': 'Catalan', 'zh-CN': 'Chinese (Simplified)', 'zh-TW': 'Chinese (Traditional)', 'hr': 'Croatian', 'cs': 'Czech', 'da': 'Danish', 'nl': 'Dutch', 'en': 'English (US)', 'en-AU': 'English (AU)', 'en-GB': 'English (UK)', 'et': 'Estonian', 'fi': 'Finnish', 'fr': 'French (FR)', 'fr-CA': 'French (CA)', 'ka': 'Georgian', 'de': 'German', 'el': 'Greek', 'gu': 'Gujarati', 'he': 'Hebrew', 'hi': 'Hindi', 'hu': 'Hungarian', 'is': 'Icelandic', 'id': 'Indonesian', 'ga': 'Irish', 'it': 'Italian', 'ja': 'Japanese', 'kn': 'Kannada', 'ko': 'Korean', 'lv': 'Latvian', 'lt': 'Lithuanian', 'mk': 'Macedonian', 'ms': 'Malay', 'mt': 'Maltese', 'no': 'Norwegian', 'fa': 'Persian', 'pl': 'Polish', 'pt': 'Portuguese (PT)', 'pt-BR': 'Portuguese (BR)', 'ro': 'Romanian', 'ru': 'Russian', 'sr': 'Serbian', 'sk': 'Slovak', 'sl': 'Slovenian', 'es': 'Spanish (ES)', 'es-MX': 'Spanish (MX)', 'sv': 'Swedish', 'tl': 'Tagalog', 'th': 'Thai', 'tr': 'Turkish', 'uk': 'Ukrainian', 'vi': 'Vietnamese', 'cy': 'Welsh', 'pa': 'Punjabi', 'sw': 'Swahili', 'ta': 'Tamil', 'ur': 'Urdu', 'zh': 'Chinese' };
-  const HEADER_AUTO_COLLAPSE_DELAY = 10000;
-
-  // --- Initialization ---
-  init();
-
-  function init() {
-    loadFontSettings();
-    loadThemeSettings();
-    applyTheme();
-    tempConnectBtn.addEventListener('click', connect);
-    tempSessionIdInput.addEventListener('input', formatSessionIdInput);
-    tempSessionIdInput.addEventListener('keydown', handleTempInputKeydown);
-    tempPasscodeInput.addEventListener('keydown', handleTempInputKeydown);
-    setupAppControls();
-  }
-
-  function setupAppControls() {
-    disconnectBtn.addEventListener('click', disconnect);
-    audioToggle.addEventListener('change', handleAudioToggle);
-    languageSelect.addEventListener('change', handleLanguageChange);
-    mainAudioPlayer.addEventListener('ended', onAudioEnded);
-    mainAudioPlayer.addEventListener('error', handleAudioError);
-    scrollDirectionBtn.addEventListener('click', handleScrollDirectionToggle);
-    wakeLockBtn.addEventListener('click', handleWakeLockButtonClick);
-    collapseBtn.addEventListener('click', toggleContentVisibility);
-    headerToggleButton.addEventListener('click', toggleHeaderCollapseManual);
-    themeToggleBtn.addEventListener('click', toggleTheme);
-    loginThemeToggleBtn.addEventListener('click', toggleTheme);
-    transcriptArea.addEventListener('scroll', handleTranscriptScroll);
-    scrollToBottomBtn.addEventListener('click', handleScrollToTranscriptBottomClick);
-    fontSizeDecreaseBtn.addEventListener('click', handleFontSizeDecrease);
-    fontSizeIncreaseBtn.addEventListener('click', handleFontSizeIncrease);
-    fontBoldToggleBtn.addEventListener('click', handleFontBoldToggle);
-  }
-
-  function connect() {
-    state.sessionId = tempSessionIdInput.value;
-    state.passcode = tempPasscodeInput.value;
-    if (!isValidSessionId(state.sessionId)) {
-      tempStatus.textContent = "Invalid Session ID format (XXXX-0000).";
-      return;
-    }
-    configInputArea.style.display = 'none';
-    appPage.style.display = 'flex';
-    state.isDeliberateDisconnect = false;
-    
-    if (sessionDisplayHeader) {
-        sessionDisplayHeader.textContent = `Session: ${maskSessionId(state.sessionId)}`;
-    }
-    populateLanguageSelect(languageSelect, 'en');
-    resetHeaderCollapseTimer();
-    connectWebSocket();
-  }
-  
-  function disconnect() {
-    state.isDeliberateDisconnect = true;
-    if (state.reconnectInterval) clearInterval(state.reconnectInterval);
-    if (state.websocket) state.websocket.close(1000, "User disconnected");
-    stopAndClearAudio();
-    appPage.style.display = 'none';
-    configInputArea.style.display = 'block';
-    updateStatus('disconnected');
-  }
-
-  function handleAudioToggle() {
-    state.audioEnabled = audioToggle.checked;
-    resetHeaderCollapseTimer();
-    if (state.audioEnabled) {
-      sendVoiceRequest(true);
-      processAudioQueue();
-    } else {
-      sendVoiceRequest(false);
-      stopAndClearAudio();
-    }
-  }
-
-  function handleLanguageChange() {
-    resetHeaderCollapseTimer();
-    const newLanguage = languageSelect.value;
-    if (state.websocket && state.websocket.readyState === WebSocket.OPEN) {
-        const wasAudioEnabled = state.audioEnabled;
-        if(wasAudioEnabled) sendVoiceRequest(false);
-        stopAndClearAudio();
-        state.websocket.send(JSON.stringify({ type: 'change', languageCode: newLanguage }));
-        if(wasAudioEnabled) setTimeout(() => sendVoiceRequest(true), 500);
-    }
-  }
-
-  function connectWebSocket() {
-    if (state.websocket) return;
-    updateStatus('connecting');
-    state.websocket = new WebSocket('wss://endpoint.wordly.ai/attend');
-
-    state.websocket.onopen = () => {
-      if (state.reconnectInterval) clearInterval(state.reconnectInterval);
-      const connectRequest = {
-        type: 'connect', presentationCode: state.sessionId,
-        languageCode: languageSelect.value || 'en',
-        identifier: `stable-viewer-${Date.now()}`
-      };
-      if (state.passcode) connectRequest.accessKey = state.passcode;
-      state.websocket.send(JSON.stringify(connectRequest));
+    // --- Global State & Config ---
+    const state = {
+        isConnecting: false,
+        isConnected: false,
+        supportsSinkId: typeof HTMLAudioElement !== 'undefined' && typeof HTMLAudioElement.prototype.setSinkId === 'function'
     };
 
-    state.websocket.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      switch (message.type) {
-        case 'status':
-          if (message.success) {
-            updateStatus('connected');
-            if (state.audioEnabled) sendVoiceRequest(true);
-          } else { updateStatus('error'); }
-          break;
-        case 'phrase': handlePhrase(message); break;
-        case 'speech':
-          if (message.synthesizedSpeech && message.synthesizedSpeech.data) {
-            state.audioQueue.push({ data: message.synthesizedSpeech.data, phraseId: message.phraseId });
-            processAudioQueue();
-          }
-          break;
-        case 'end': disconnect(); break;
-      }
-    };
+    const languageMap = { 'auto': 'Auto-Detect', 'af': 'Afrikaans', 'sq': 'Albanian', 'ar': 'Arabic', 'hy': 'Armenian', 'bn': 'Bengali', 'bg': 'Bulgarian', 'ca': 'Catalan', 'zh-HK': 'Cantonese', 'zh-CN': 'Chinese (Simplified)', 'zh-TW': 'Chinese (Traditional)', 'hr': 'Croatian', 'cs': 'Czech', 'da': 'Danish', 'nl': 'Dutch', 'en': 'English (US)', 'en-AU': 'English (AU)', 'en-GB': 'English (UK)', 'et': 'Estonian', 'fi': 'Finnish', 'fr': 'French (FR)', 'fr-CA': 'French (CA)', 'ka': 'Georgian', 'de': 'German', 'el': 'Greek', 'gu': 'Gujarati', 'he': 'Hebrew', 'hi': 'Hindi', 'hu': 'Hungarian', 'is': 'Icelandic', 'id': 'Indonesian', 'ga': 'Irish', 'it': 'Italian', 'ja': 'Japanese', 'kn': 'Kannada', 'ko': 'Korean', 'lv': 'Latvian', 'lt': 'Lithuanian', 'mk': 'Macedonian', 'ms': 'Malay', 'mt': 'Maltese', 'no': 'Norwegian', 'fa': 'Persian', 'pl': 'Polish', 'pt': 'Portuguese (PT)', 'pt-BR': 'Portuguese (BR)', 'pa': 'Punjabi', 'ro': 'Romanian', 'ru': 'Russian', 'sr': 'Serbian', 'sk': 'Slovak', 'sl': 'Slovenian', 'es': 'Spanish (ES)', 'es-MX': 'Spanish (MX)', 'sw': 'Swahili', 'sv': 'Swedish', 'ta': 'Tamil', 'tl': 'Tagalog', 'th': 'Thai', 'tr': 'Turkish', 'uk': 'Ukrainian', 'ur': 'Urdu', 'vi': 'Vietnamese', 'cy': 'Welsh' };
 
-    state.websocket.onclose = () => {
-      state.websocket = null;
-      if (state.isDeliberateDisconnect) return;
-      updateStatus('error');
-      if (state.reconnectInterval) clearInterval(state.reconnectInterval);
-      state.reconnectInterval = setInterval(connectWebSocket, 3000);
-    };
-    state.websocket.onerror = () => updateStatus('error');
-  }
+    // --- DOM Elements ---
+    const loginPage = document.getElementById('login-page');
+    const appPage = document.getElementById('app-page');
+    const loginForm = document.getElementById('login-form');
+    const connectionToggleBtn = document.getElementById('connection-toggle-btn');
+    const duckingSlider = document.getElementById('ducking-slider');
 
-  function handlePhrase(message) {
-    const isUserNearBottom = isScrolledToTranscriptBottom();
-    let phraseElement = document.getElementById(`phrase-${message.phraseId}`);
-    
-    if (!phraseElement) {
-        phraseElement = document.createElement('div');
-        phraseElement.id = `phrase-${message.phraseId}`;
-        phraseElement.className = 'phrase';
-        phraseElement.innerHTML = `
-            <div class="phrase-header">
-                <span class="speaker-name">${message.name || `Speaker ${message.speakerId.slice(-4)}`}</span>
-            </div>
-            <div class="phrase-text"></div>`;
+    // ===================================================================================
+    // --- MODULE 1: OUTGOING "JOIN" SESSION ---
+    // ===================================================================================
+    const outgoingModule = {
+        websocket: null,
+        status: 'disconnected',
+        config: {},
+        mediaStream: null,
+        audioContext: null,
+        audioLevel: 0,
+        muted: false,
         
-        // --- MODIFIED: Physically add to top or bottom ---
-        if (state.scrollDirection === 'down') {
-            transcriptArea.appendChild(phraseElement);
-        } else {
-            transcriptArea.insertBefore(phraseElement, transcriptArea.firstChild);
+        connect: function(config) {
+            this.config = config;
+            return new Promise((resolve, reject) => {
+                console.log("[Outgoing Session] Attempting to connect...");
+                this.updateStatus('connecting', 'Connecting...');
+                const endpoint = 'wss://dev-endpoint.wordly.ai/present';
+                this.websocket = new WebSocket(endpoint);
+                this.websocket.binaryType = 'arraybuffer';
+
+                const timeout = setTimeout(() => { this.websocket.close(); reject(new Error("Join: Connection timed out.")); }, 10000);
+
+                this.websocket.onopen = () => {
+                    console.log("[Outgoing Session] WebSocket connection opened.");
+                    const connectRequest = {
+                        type: 'connect', presentationCode: this.config.sessionId, accessKey: this.config.passcode,
+                        languageCode: this.config.sourceLanguage, speakerId: `babelfish-join-${Date.now()}`,
+                        name: 'My Voice (Babelfish)', connectionCode: 'wordly-babelfish-app', context: null
+                    };
+                    console.log("[Outgoing Session] Sending 'connect' command:", connectRequest);
+                    this.send(connectRequest);
+                };
+                this.websocket.onmessage = (event) => { clearTimeout(timeout); this.handleMessage(event, resolve, reject); };
+                this.websocket.onerror = (err) => { clearTimeout(timeout); console.error("[Outgoing Session] WebSocket Error:", err); this.updateStatus('error', 'Join: Connection Error'); reject(err); };
+                this.websocket.onclose = (event) => { clearTimeout(timeout);
+                    if (this.status !== 'connected') { console.log(`[Outgoing Session] WebSocket closed unexpectedly (Code: ${event.code})`); this.updateStatus('error', 'Join: Connection Failed'); reject(new Error("Join: Connection closed unexpectedly.")); }
+                    else { console.log("[Outgoing Session] WebSocket closed normally."); this.updateStatus('disconnected', 'Disconnected'); }
+                };
+            });
+        },
+        
+        handleMessage: function(event, resolve, reject) {
+            if (!(event.data instanceof ArrayBuffer)) return;
+            const decoder = new TextDecoder('utf-8');
+            let message;
+            try { message = JSON.parse(decoder.decode(event.data)); }
+            catch (e) { return; }
+
+            console.log("[Outgoing Session] Received message:", message);
+
+            if (message.type === 'status' && message.success) {
+                this.updateStatus('connected', 'Connected');
+                console.log("[Outgoing Session] Connection successful. Sending 'start' command...");
+                this.send({ type: 'start', languageCode: this.config.sourceLanguage, sampleRate: 16000 });
+                this.startAudioCapture();
+                resolve(this);
+            } else if (message.type === 'status' && !message.success) {
+                this.updateStatus('error', `Join: Failed - ${message.message}`);
+                this.disconnect();
+                reject(new Error(message.message));
+            }
+        },
+
+        startAudioCapture: function() {
+            console.log("[Outgoing Session] Attempting to start audio capture...");
+            if (this.mediaStream) this.stopAudioCapture();
+            const constraints = { audio: { deviceId: this.config.inputDeviceId ? { exact: this.config.inputDeviceId } : undefined, sampleRate: 16000, channelCount: 1, echoCancellation: true } };
+            navigator.mediaDevices.getUserMedia(constraints).then(stream => {
+                console.log("[Outgoing Session] Microphone access granted.");
+                this.mediaStream = stream;
+                this.audioContext = new AudioContext({ sampleRate: 16000 });
+                const source = this.audioContext.createMediaStreamSource(stream);
+                const processor = this.audioContext.createScriptProcessor(2048, 1, 1);
+                const analyser = this.audioContext.createAnalyser();
+                source.connect(analyser); analyser.connect(processor); processor.connect(this.audioContext.destination);
+                processor.onaudioprocess = (e) => {
+                    const data = e.inputBuffer.getChannelData(0);
+                    const rms = this.getRMS(data);
+                    this.audioLevel = rms;
+                    this.updateVisualizer();
+                    incomingModule.applyDucking(rms > 0.02);
+                    if (!this.muted) this.send(this.toPCM(data));
+                };
+            }).catch(err => { console.error("[Outgoing Session] Microphone Error:", err); this.addSystemMessage("Could not get microphone.", true); });
+        },
+        
+        disconnect: function() { console.log("[Outgoing Session] Disconnecting..."); this.stopAudioCapture(); if (this.websocket) { this.websocket.onclose = null; this.websocket.close(1000, 'User disconnected'); } this.updateStatus('disconnected', 'Disconnected'); },
+        send: function(data) { if (this.websocket?.readyState !== WebSocket.OPEN) return; if (data instanceof ArrayBuffer) this.websocket.send(data); else this.websocket.send(JSON.stringify(data)); },
+        getRMS: buffer => Math.sqrt(buffer.reduce((s, v) => s + v * v, 0) / buffer.length),
+        toPCM: function(buffer) { const pcm = new Int16Array(buffer.length); for (let i = 0; i < buffer.length; i++) pcm[i] = Math.max(-1, Math.min(1, buffer[i])) * 0x7FFF; return pcm.buffer; },
+        stopAudioCapture: function() { this.mediaStream?.getTracks().forEach(track => track.stop()); this.audioContext?.close().catch(()=>{}); this.audioLevel = 0; this.updateVisualizer(); },
+        updateStatus: function(status, message) { this.status = status; this.config.ui.statusLight.className = `session-status-light ${status}`; this.addSystemMessage(message, status === 'error'); },
+        addSystemMessage: function(text, isError=false) { const el = document.createElement('div'); el.textContent = text; this.config.ui.transcript.insertBefore(el, this.config.ui.transcript.firstChild); },
+        updateVisualizer: function() { if (!this.config.ui.visualizer) return; this.config.ui.visualizer.style.width = `${Math.min(100, this.audioLevel * 800)}%`; this.config.ui.visualizer.classList.toggle('muted', this.muted); },
+        toggleMute: function() { this.muted = !this.muted; this.config.ui.muteBtn.classList.toggle('muted', this.muted); },
+    };
+
+    // =====================================================================================
+    // --- MODULE 2: INCOMING "ATTEND" SESSION ---
+    // =====================================================================================
+    const incomingModule = {
+        websocket: null,
+        status: 'disconnected',
+        config: {},
+        audioQueue: [],
+        isPlaying: false,
+        currentAudioElement: null,
+        audioEnabled: true,
+
+        connect: function(config) {
+            this.config = config;
+            return new Promise((resolve, reject) => {
+                console.log("[Incoming Session] Attempting to connect...");
+                this.updateStatus('connecting', 'Connecting...');
+                const endpoint = 'wss://dev-endpoint.wordly.ai/attend';
+                this.websocket = new WebSocket(endpoint);
+                this.websocket.binaryType = 'arraybuffer';
+                const timeout = setTimeout(() => { this.websocket.close(); reject(new Error("Attend: Connection timed out.")); }, 10000);
+
+                this.websocket.onopen = () => {
+                    console.log("[Incoming Session] WebSocket connection opened.");
+                    const connectRequest = { type: 'connect', presentationCode: this.config.sessionId, accessKey: this.config.passcode || undefined, languageCode: this.config.targetLanguage, };
+                    console.log("[Incoming Session] Sending 'connect' command:", connectRequest);
+                    this.send(connectRequest);
+                };
+                this.websocket.onmessage = (event) => { clearTimeout(timeout); this.handleMessage(event, resolve, reject); };
+                this.websocket.onerror = (err) => { clearTimeout(timeout); console.error("[Incoming Session] WebSocket Error:", err); this.updateStatus('error', 'Attend: Connection Error'); reject(err); };
+                this.websocket.onclose = (event) => { clearTimeout(timeout);
+                    if (this.status !== 'connected') { console.log(`[Incoming Session] WebSocket closed unexpectedly (Code: ${event.code})`); this.updateStatus('error', 'Attend: Connection Failed'); reject(new Error("Attend: Connection closed unexpectedly.")); }
+                    else { console.log("[Incoming Session] WebSocket closed normally."); this.updateStatus('disconnected', 'Disconnected'); }
+                };
+            });
+        },
+
+        handleMessage: function(event, resolve, reject) {
+            const decoder = new TextDecoder('utf-8');
+            let message;
+            try { message = JSON.parse(decoder.decode(event.data)); } catch (e) { return; }
+            
+            console.log("[Incoming Session] Received message:", message);
+
+            if (message.type === 'status' && message.success) {
+                this.updateStatus('connected', 'Connected');
+                console.log("[Incoming Session] Connection successful. Enabling voice if toggled on...");
+                if (this.audioEnabled) this.send({ type: 'voice', enabled: true });
+                resolve(this);
+            } else if (message.type === 'status' && !message.success) {
+                this.updateStatus('error', `Attend: Failed - ${message.message}`);
+                this.disconnect();
+                reject(new Error(message.message));
+            } else if (message.type === 'speech') {
+                this.playAudio(message.synthesizedSpeech.data);
+            }
+        },
+        
+        playAudio: function(data) {
+            if (!this.audioEnabled) return;
+            this.audioQueue.push({ data, deviceId: this.config.outputDeviceId });
+            this.processAudioQueue();
+        },
+
+        processAudioQueue: function() {
+            if (this.isPlaying || this.audioQueue.length === 0) return;
+            this.isPlaying = true;
+            const item = this.audioQueue.shift();
+            const blob = new Blob([new Uint8Array(item.data)], { type: 'audio/wav' });
+            const url = URL.createObjectURL(blob);
+            const audio = new Audio(url);
+            this.currentAudioElement = audio;
+            audio.oncanplaythrough = async () => { if (item.deviceId && state.supportsSinkId) { try { await audio.setSinkId(item.deviceId); } catch (err) { console.error("setSinkId failed:", err); } } audio.play().catch(e => console.error("Playback failed:", e)); };
+            const cleanup = () => { URL.revokeObjectURL(url); this.isPlaying = false; this.currentAudioElement = null; setTimeout(() => this.processAudioQueue(), 0); };
+            audio.onended = cleanup; audio.onerror = cleanup;
+        },
+
+        disconnect: function() { console.log("[Incoming Session] Disconnecting..."); this.stopAudioPlayback(); if (this.websocket) { this.websocket.onclose = null; this.websocket.close(1000, 'User disconnected'); } this.updateStatus('disconnected', 'Disconnected'); },
+        send: function(data) { if (this.websocket?.readyState === WebSocket.OPEN) this.websocket.send(JSON.stringify(data)); },
+        stopAudioPlayback: function() { this.audioQueue = []; if (this.currentAudioElement) { this.currentAudioElement.pause(); this.currentAudioElement.src = ''; } this.isPlaying = false; },
+        applyDucking: function(isSpeaking) { if (this.currentAudioElement) this.currentAudioElement.volume = isSpeaking ? parseFloat(duckingSlider.value) : 1.0; },
+        updateStatus: function(status, message) { this.status = status; this.config.ui.statusLight.className = `session-status-light ${status}`; this.addSystemMessage(message, status === 'error'); },
+        addSystemMessage: function(text, isError=false) { const el = document.createElement('div'); el.textContent = text; this.config.ui.transcript.insertBefore(el, this.config.ui.transcript.firstChild); },
+        toggleAudio: function(enabled) { this.audioEnabled = enabled; if (this.status === 'connected') this.send({ type: 'voice', enabled: this.audioEnabled }); if (!this.audioEnabled) this.stopAudioPlayback(); },
+    };
+
+    // ===================================================================================
+    // --- ORCHESTRATOR ---
+    // ===================================================================================
+    async function handleLogin(e) {
+        e.preventDefault();
+        showLoginStatus("Getting audio devices...");
+        try { await initializeAudioDevices(); showLoginStatus("Ready to configure.", false); }
+        catch (err) { return; }
+        loginPage.style.display = 'none';
+        appPage.style.display = 'flex';
+        setupUIEventListeners();
+    }
+    
+    function handleConnectionToggle() {
+        if (state.isConnecting) { disconnectAll(); }
+        else if (state.isConnected) { disconnectAll(); }
+        else { connectAll(); }
+    }
+
+    async function connectAll() {
+        if (state.isConnecting) return;
+        state.isConnecting = true;
+        updateConnectionButton(true, "Cancel");
+
+        getConfigFromUI('outgoing').ui.transcript.innerHTML = '';
+        getConfigFromUI('incoming').ui.transcript.innerHTML = '';
+        
+        try {
+            console.log("[Orchestrator] Starting connection for both sessions...");
+            await Promise.all([
+                outgoingModule.connect(getConfigFromUI('outgoing')),
+                incomingModule.connect(getConfigFromUI('incoming'))
+            ]);
+            console.log("[Orchestrator] Both sessions connected successfully.");
+            state.isConnected = true;
+        } catch (error) {
+            console.error("[Orchestrator] One or more sessions failed to connect:", error);
+            outgoingModule.disconnect();
+            incomingModule.disconnect();
+            state.isConnected = false;
+        } finally {
+            state.isConnecting = false;
+            updateConnectionButton(false);
         }
     }
-    
-    phraseElement.querySelector('.phrase-text').textContent = message.translatedText;
 
-    if (message.isFinal) {
-        if (state.scrollDirection === 'up') {
-            scrollToTranscriptTop();
-        } else if (isUserNearBottom) {
-            scrollToTranscriptBottom();
+    function disconnectAll() {
+        console.log("[Orchestrator] Disconnecting both sessions.");
+        outgoingModule.disconnect();
+        incomingModule.disconnect();
+        state.isConnected = false;
+        state.isConnecting = false;
+        updateConnectionButton(false);
+    }
+    
+    function getConfigFromUI(type) {
+        return {
+            sessionId: document.getElementById(`${type}-session-id`).value,
+            passcode: document.getElementById(`${type}-passcode`)?.value,
+            inputDeviceId: document.getElementById(`${type}-input-device-select`).value,
+            sourceLanguage: document.getElementById(`${type}-source-language-select`).value,
+            targetLanguage: document.getElementById(`${type}-target-language-select`).value,
+            outputDeviceId: document.getElementById(`${type}-output-device-select`).value,
+            ui: {
+                statusLight: document.querySelector(`#${type}-session .session-status-light`),
+                transcript: document.querySelector(`#${type}-session .session-transcript`),
+                visualizer: document.querySelector(`#${type}-session .audio-level`),
+                muteBtn: document.querySelector(`#${type}-session .mute-btn`),
+            }
+        };
+    }
+    
+    function updateConnectionButton(isConnecting, text) {
+        const btn = connectionToggleBtn;
+        btn.disabled = false;
+        if (isConnecting) {
+            btn.textContent = text || "Connecting...";
+            btn.className = "disconnect-button";
         } else {
-            state.newMessagesWhileScrolled++;
-            newMessageCountSpan.textContent = `(${state.newMessagesWhileScrolled})`;
-            scrollToBottomBtn.style.display = 'flex';
+            btn.textContent = state.isConnected ? "Disconnect All" : "Connect All";
+            btn.className = state.isConnected ? "disconnect-button" : "connect-button";
         }
     }
-  }
 
-  function processAudioQueue() {
-    if (state.isPlayingAudio || !state.audioEnabled || state.audioQueue.length === 0) {
-      return;
+    function setupUIEventListeners() {
+        document.querySelector('#outgoing-session .mute-btn').onclick = () => outgoingModule.toggleMute();
+        document.getElementById('incoming-audio-toggle').onchange = (e) => incomingModule.toggleAudio(e.target.checked);
     }
-    state.isPlayingAudio = true;
+
+    async function refreshAllDeviceLists() {
+        try {
+            console.log("[Orchestrator] Refreshing device lists...");
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            stream.getTracks().forEach(track => track.stop());
+            
+            const inputDevices = devices.filter(d => d.kind === 'audioinput');
+            const outputDevices = devices.filter(d => d.kind === 'audiooutput');
+            
+            populateDeviceDropdown('outgoing-input-device-select', inputDevices);
+            populateDeviceDropdown('incoming-input-device-select', inputDevices);
+            populateDeviceDropdown('outgoing-output-device-select', outputDevices, true);
+            populateDeviceDropdown('incoming-output-device-select', outputDevices, true);
+            console.log("[Orchestrator] Device lists refreshed.");
+        } catch(err) {
+            alert("Could not refresh devices. Please ensure microphone permission is granted.");
+        }
+    }
+
+    async function initializeAudioDevices() {
+        try { await refreshAllDeviceLists(); }
+        catch (err) { showLoginStatus("Could not access audio devices. Please grant permission.", true); throw err; }
+    }
     
-    const audioItem = state.audioQueue.shift();
-    const blob = new Blob([new Uint8Array(audioItem.data)], { type: 'audio/wav' });
-    const url = URL.createObjectURL(blob);
+    function populateDeviceDropdown(elementId, devices, isOutput = false) {
+        const select = document.getElementById(elementId);
+        const currentVal = select.value;
+        select.innerHTML = '';
+        if (isOutput && !state.supportsSinkId) { select.add(new Option('Default Device Only', '')); select.disabled = true; return; }
+        select.add(new Option(`Default ${isOutput ? 'Output' : 'Input'}`, ''));
+        devices.forEach(d => { if (d.deviceId !== 'default') select.add(new Option(d.label || `${isOutput ? 'Output' : 'Input'} ${select.options.length}`, d.deviceId)); });
+        if ([...select.options].some(o => o.value === currentVal)) { select.value = currentVal; }
+    }
+
+    function populateLanguageDropdowns() {
+        const selects = document.querySelectorAll('select[id$="-language-select"]');
+        selects.forEach(select => {
+            for (const [code, name] of Object.entries(languageMap)) select.add(new Option(name, code));
+        });
+        document.getElementById('outgoing-source-language-select').value = 'en';
+        document.getElementById('outgoing-target-language-select').value = 'es-MX';
+        document.getElementById('incoming-source-language-select').value = 'es-MX';
+        document.getElementById('incoming-target-language-select').value = 'en';
+    }
+
+    function showLoginStatus(message, isError = false) {
+        const loginStatus = document.getElementById('login-status');
+        loginStatus.textContent = message;
+        loginStatus.className = isError ? 'status-message error' : 'status-message success';
+        loginStatus.style.display = 'block';
+    }
     
-    const phraseElement = document.getElementById(`phrase-${audioItem.phraseId}`);
-    if (phraseElement) {
-        const playing = transcriptArea.querySelector('.phrase-playing');
-        if(playing) playing.classList.remove('phrase-playing');
-        phraseElement.classList.add('phrase-playing');
-    }
-    mainAudioPlayer.src = url;
-    mainAudioPlayer.play().catch(handleAudioError);
-  }
-
-  function onAudioEnded() {
-      state.isPlayingAudio = false;
-      const playingElement = transcriptArea.querySelector('.phrase-playing');
-      if(playingElement) playingElement.classList.remove('phrase-playing');
-      if(mainAudioPlayer.src.startsWith('blob:')) {
-          URL.revokeObjectURL(mainAudioPlayer.src);
-      }
-      processAudioQueue();
-  }
-
-  function handleAudioError(e) {
-    console.error("Audio playback error:", e);
-    onAudioEnded();
-  }
-
-  function stopAndClearAudio() {
-    mainAudioPlayer.pause();
-    mainAudioPlayer.src = "";
-    state.audioQueue = [];
-    state.isPlayingAudio = false;
-    const playingElement = transcriptArea.querySelector('.phrase-playing');
-    if(playingElement) playingElement.classList.remove('phrase-playing');
-  }
-
-  function sendVoiceRequest(enabled) {
-    if (state.websocket && state.websocket.readyState === WebSocket.OPEN) {
-      state.websocket.send(JSON.stringify({ type: 'voice', enabled }));
-    }
-  }
-  
-  function updateStatus(status) {
-    connectionStatusLight.className = `status-light ${status}`;
-  }
-
-  function handleScrollDirectionToggle() {
-      resetHeaderCollapseTimer();
-      state.scrollDirection = state.scrollDirection === 'down' ? 'up' : 'down';
-      
-      const icon = scrollDirectionBtn.querySelector('.text-flow-icon');
-      icon.innerHTML = state.scrollDirection === 'down' ? 'T&darr;' : 'T&uarr;';
-      
-      // --- MODIFIED: Manually reverse existing elements when toggling ---
-      const children = Array.from(transcriptArea.children);
-      children.reverse().forEach(child => transcriptArea.appendChild(child));
-
-      if (state.scrollDirection === 'down') {
-          scrollToTranscriptBottom();
-      } else {
-          scrollToTranscriptTop();
-      }
-  }
-
-  // --- All other UI and utility functions ---
-  function populateLanguageSelect(selectElement, selectedLanguage) { if (!selectElement) return; selectElement.innerHTML = ''; Object.entries(languageMap).forEach(([code, name]) => { const option = document.createElement('option'); option.value = code; option.textContent = name; selectElement.appendChild(option); }); selectElement.value = selectedLanguage; }
-  async function handleWakeLockButtonClick() { resetHeaderCollapseTimer(); if (screenWakeLock) { await releaseWakeLock(); } else { await requestWakeLock(); } }
-  async function requestWakeLock() { try { screenWakeLock = await navigator.wakeLock.request('screen'); wakeLockBtn.classList.add('active'); showNotification('Screen will stay on.', 'info'); screenWakeLock.addEventListener('release', () => { wakeLockBtn.classList.remove('active'); screenWakeLock = null; }); } catch (err) { wakeLockBtn.textContent = 'Wake Lock Failed'; showNotification('Could not activate screen lock.', 'error'); } }
-  async function releaseWakeLock() { if (screenWakeLock) { await screenWakeLock.release(); screenWakeLock = null; showNotification('Screen lock released.', 'info'); } }
-  function toggleContentVisibility() { resetHeaderCollapseTimer(); state.contentHidden = !state.contentHidden; mainContent.classList.toggle('transcript-hidden', state.contentHidden); collapseBtn.textContent = state.contentHidden ? 'View Text' : 'Hide Text'; }
-  function toggleHeaderCollapseManual() { clearTimeout(state.headerCollapseTimeout); state.headerCollapsed = !state.headerCollapsed; appHeader.classList.toggle('collapsed', state.headerCollapsed); if (!state.headerCollapsed) { resetHeaderCollapseTimer(); } }
-  function resetHeaderCollapseTimer() { clearTimeout(state.headerCollapseTimeout); if (state.headerCollapsed) { state.headerCollapsed = false; appHeader.classList.remove('collapsed'); } state.headerCollapseTimeout = setTimeout(() => { if (!state.headerCollapsed && document.visibilityState === 'visible') { state.headerCollapsed = true; appHeader.classList.add('collapsed'); } }, HEADER_AUTO_COLLAPSE_DELAY); }
-  function isScrolledToTranscriptBottom() { if (!transcriptArea) return true; const { scrollTop, scrollHeight, clientHeight } = transcriptArea; if (clientHeight === 0) return true; return scrollHeight - Math.ceil(scrollTop) - clientHeight < 50; }
-  function scrollToTranscriptBottom() { if (transcriptArea) { transcriptArea.scrollTop = transcriptArea.scrollHeight; state.userScrolledUp = false; state.newMessagesWhileScrolled = 0; scrollToBottomBtn.style.display = 'none'; } }
-  function scrollToTranscriptTop() { if (transcriptArea) { transcriptArea.scrollTop = 0; } }
-  function handleTranscriptScroll() { if (!transcriptArea) return; if (state.scrollDirection === 'down') { const isNearBottom = isScrolledToTranscriptBottom(); if (!isNearBottom) { state.userScrolledUp = true; } else { if (state.userScrolledUp) { state.userScrolledUp = false; state.newMessagesWhileScrolled = 0; scrollToBottomBtn.style.display = 'none'; } } } }
-  function handleScrollToTranscriptBottomClick() { scrollToTranscriptBottom(); }
-  function isValidSessionId(sessionId) { return /^[A-Z0-9]{4}-\d{4}$/.test(sessionId); }
-  function formatSessionIdInput(event) { const input = event.target; let value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); let formattedValue = ""; if (value.length > 4) { formattedValue = value.slice(0, 4) + '-' + value.slice(4, 8); } else { formattedValue = value; } if (input.value !== formattedValue) { const start = input.selectionStart; const end = input.selectionEnd; const delta = formattedValue.length - input.value.length; input.value = formattedValue; try { input.setSelectionRange(start + delta, end + delta); } catch (e) {} } }
-  function handleTempInputKeydown(event) { if (event.key === 'Enter') { event.preventDefault(); connect(); } }
-  function maskSessionId(sessionId) { if (!sessionId || typeof sessionId !== 'string') { return "Unknown Session"; } const parts = sessionId.split('-'); if (parts.length !== 2 || parts[0].length !== 4 || parts[1].length !== 4) { return sessionId; } return `${parts[0].substring(0, 2)}XX-##${parts[1].substring(2, 4)}`; }
-  function loadFontSettings() { try { const settings = localStorage.getItem('wordlyViewerFontSettings'); if (settings) { const parsed = JSON.parse(settings); state.fontSize = parsed.size === 'large' ? 'large' : 'normal'; state.fontBold = !!parsed.bold; } applyFontSettings(); } catch (e) {} }
-  function applyFontSettings() { appPage.classList.remove('font-normal', 'font-large', 'font-bold'); appPage.classList.add(state.fontSize === 'large' ? 'font-large' : 'font-normal'); if (state.fontBold) appPage.classList.add('font-bold'); fontBoldToggleBtn.classList.toggle('active', state.fontBold); fontSizeIncreaseBtn.classList.toggle('active', state.fontSize === 'large'); fontSizeDecreaseBtn.classList.toggle('active', state.fontSize === 'normal'); fontBoldToggleBtn.style.fontWeight = state.fontBold ? 'normal' : 'bold'; }
-  function saveFontSettings() { localStorage.setItem('wordlyViewerFontSettings', JSON.stringify({ size: state.fontSize, bold: state.fontBold })); }
-  function handleFontSizeDecrease() { resetHeaderCollapseTimer(); if (state.fontSize !== 'normal') { state.fontSize = 'normal'; applyFontSettings(); saveFontSettings(); } }
-  function handleFontSizeIncrease() { resetHeaderCollapseTimer(); if (state.fontSize !== 'large') { state.fontSize = 'large'; applyFontSettings(); saveFontSettings(); } }
-  function handleFontBoldToggle() { resetHeaderCollapseTimer(); state.fontBold = !state.fontBold; applyFontSettings(); saveFontSettings(); }
-  function loadThemeSettings() { try { const themeSetting = localStorage.getItem('wordlyViewerTheme'); if (themeSetting) state.darkMode = themeSetting === 'dark'; applyTheme();} catch (e) {} }
-  function applyTheme() { const themeValue = state.darkMode ? 'dark' : 'light'; document.documentElement.setAttribute('data-theme', themeValue); updateThemeIcons(themeToggleBtn); updateThemeIcons(loginThemeToggleBtn); }
-  function updateThemeIcons(button) { if (!button) return; const moonIcon = button.querySelector('.moon-icon'); const sunIcon = button.querySelector('.sun-icon'); if (moonIcon && sunIcon) { if (state.darkMode) { moonIcon.style.display = 'none'; sunIcon.style.display = 'block'; } else { moonIcon.style.display = 'block'; sunIcon.style.display = 'none'; } } }
-  function saveThemeSettings() { localStorage.setItem('wordlyViewerTheme', state.darkMode ? 'dark' : 'light'); }
-  function toggleTheme() { state.darkMode = !state.darkMode; applyTheme(); saveThemeSettings(); showNotification(`${state.darkMode ? 'Dark' : 'Light'} mode enabled`, 'info'); }
-  function showNotification(message, type = 'info') { const existing = document.querySelector('.notification'); if (existing) existing.remove(); const notification = document.createElement('div'); notification.className = `notification ${type}`; notification.textContent = message; document.body.appendChild(notification); requestAnimationFrame(() => { notification.classList.add('visible'); }); const notificationDuration = 3000; setTimeout(() => { notification.classList.remove('visible'); setTimeout(() => notification.remove(), 500); }, notificationDuration - 500); }
+    // --- Initial Setup ---
+    init();
 });
