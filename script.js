@@ -208,7 +208,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (state.scrollDirection === 'up') {
             scrollToTranscriptTop();
         } else {
-            // In standard 'down' mode, only auto-scroll if the user hasn't scrolled up.
             if (!state.userScrolledUp) {
                 scrollToTranscriptBottom();
             } else {
@@ -300,11 +299,9 @@ document.addEventListener('DOMContentLoaded', () => {
   function toggleHeaderCollapseManual() { clearTimeout(state.headerCollapseTimeout); state.headerCollapsed = !state.headerCollapsed; appHeader.classList.toggle('collapsed', state.headerCollapsed); if (!state.headerCollapsed) { resetHeaderCollapseTimer(); } }
   function resetHeaderCollapseTimer() { clearTimeout(state.headerCollapseTimeout); if (state.headerCollapsed) { state.headerCollapsed = false; appHeader.classList.remove('collapsed'); } state.headerCollapseTimeout = setTimeout(() => { if (!state.headerCollapsed && document.visibilityState === 'visible') { state.headerCollapsed = true; appHeader.classList.add('collapsed'); } }, HEADER_AUTO_COLLAPSE_DELAY); }
   
-  // --- MODIFIED: Renamed from isScrolledToTranscriptBottom for clarity ---
-  function isUserAtBottom() {
+  function isScrolledToTranscriptBottom() {
     if (!transcriptArea) return true;
     const { scrollTop, scrollHeight, clientHeight } = transcriptArea;
-    // The threshold (e.g., 50 pixels) can be adjusted if needed
     return scrollHeight - Math.ceil(scrollTop) - clientHeight < 50;
   }
   
@@ -313,9 +310,6 @@ document.addEventListener('DOMContentLoaded', () => {
         requestAnimationFrame(() => {
             transcriptArea.scrollTop = transcriptArea.scrollHeight;
         });
-        state.userScrolledUp = false; 
-        state.newMessagesWhileScrolled = 0; 
-        scrollToBottomBtn.style.display = 'none'; 
     } 
   }
   function scrollToTranscriptTop() { 
@@ -326,21 +320,23 @@ document.addEventListener('DOMContentLoaded', () => {
     } 
   }
   
-  // --- MODIFIED: Simplified scroll handling logic ---
   function handleTranscriptScroll() {
     if (!transcriptArea || state.scrollDirection === 'up') {
-        // We only track this for the standard 'down' direction
+        state.userScrolledUp = false; // Reset flag in 'up' mode
         return;
     }
-    // If user is at the bottom, reset the flag. Otherwise, set it.
-    state.userScrolledUp = !isUserAtBottom();
+    state.userScrolledUp = !isScrolledToTranscriptBottom();
     if (!state.userScrolledUp) {
         state.newMessagesWhileScrolled = 0;
         scrollToBottomBtn.style.display = 'none';
     }
   }
 
-  function handleScrollToTranscriptBottomClick() { scrollToTranscriptBottom(); }
+  function handleScrollToTranscriptBottomClick() {
+      state.userScrolledUp = false; // Set flag to false so auto-scroll resumes
+      scrollToTranscriptBottom(); 
+  }
+
   function isValidSessionId(sessionId) { return /^[A-Z0-9]{4}-\d{4}$/.test(sessionId); }
   function formatSessionIdInput(event) { const input = event.target; let value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); let formattedValue = ""; if (value.length > 4) { formattedValue = value.slice(0, 4) + '-' + value.slice(4, 8); } else { formattedValue = value; } if (input.value !== formattedValue) { const start = input.selectionStart; const end = input.selectionEnd; const delta = formattedValue.length - input.value.length; input.value = formattedValue; try { input.setSelectionRange(start + delta, end + delta); } catch (e) {} } }
   function handleTempInputKeydown(event) { if (event.key === 'Enter') { event.preventDefault(); connect(); } }
