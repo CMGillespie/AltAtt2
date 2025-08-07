@@ -808,12 +808,13 @@ input:focus-visible + .slider {
 .transcript-area {
   flex-grow: 1;
 }
+/* --- ADD THIS NEW RULE to style.css --- */
 
-
-/* --- THE REST OF YOUR CSS IS UNCHANGED --- */
-
-/* --- THE REST OF YOUR CSS IS UNCHANGED --- */
-
+/* RTL Text Styling */
+.phrase.rtl .phrase-text {
+  direction: rtl;
+  text-align: right;
+}
 
 /* Pulse Animation */
 @keyframes pulse {
