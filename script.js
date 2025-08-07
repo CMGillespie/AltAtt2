@@ -1,4 +1,4 @@
-// Wordly Secure Viewer Script (v16 - Final UI Logic)
+// Wordly Secure Viewer Script (v17 - Final UI Fixes)
 document.addEventListener('DOMContentLoaded', () => {
 
   if ('serviceWorker' in navigator) {
@@ -181,8 +181,8 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     state.websocket.onerror = () => updateStatus('error');
   }
-
-  // --- MODIFIED: RTL logic updated ---
+  
+  // --- MODIFIED: RTL logic updated to be permanent per phrase ---
   function handlePhrase(message) {
     const isUserNearBottom = isScrolledToTranscriptBottom();
     let phraseElement = document.getElementById(`phrase-${message.phraseId}`);
@@ -192,7 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
         phraseElement.id = `phrase-${message.phraseId}`;
         phraseElement.className = 'phrase';
         
-        // Stamp the phrase with the current direction
+        // Stamp the phrase with the current direction. It will not change later.
         if (rtlLanguages.includes(languageSelect.value)) {
           phraseElement.classList.add('rtl');
         }
@@ -314,12 +314,54 @@ document.addEventListener('DOMContentLoaded', () => {
   function handleTempInputKeydown(event) { if (event.key === 'Enter') { event.preventDefault(); connect(); } }
   function maskSessionId(sessionId) { if (!sessionId || typeof sessionId !== 'string') { return "Unknown Session"; } const parts = sessionId.split('-'); if (parts.length !== 2 || parts[0].length !== 4 || parts[1].length !== 4) { return sessionId; } return `${parts[0].substring(0, 2)}XX-##${parts[1].substring(2, 4)}`; }
   
-  // --- MODIFIED: Font logic updated ---
-  function loadFontSettings() { try { const settings = localStorage.getItem('wordlyViewerFontSettings'); if (settings) { const parsed = JSON.parse(settings); state.fontSize = parsed.size === 'large' ? 'large' : 'normal'; state.fontBold = !!parsed.bold; } } catch (e) { state.fontSize = 'normal'; state.fontBold = false; } applyFontSettings(); }
-  function applyFontSettings() { appPage.classList.remove('font-normal', 'font-large', 'font-bold'); appPage.classList.add(state.fontSize === 'large' ? 'font-large' : 'font-normal'); if (state.fontBold) appPage.classList.add('font-bold'); const smallA = fontSizeToggleBtn.querySelector('.small'); const largeA = fontSizeToggleBtn.querySelector('.large'); if (state.fontSize === 'normal') { smallA.style.display = 'none'; largeA.style.display = 'inline'; } else { smallA.style.display = 'inline'; largeA.style.display = 'none'; } fontBoldToggleBtn.style.fontWeight = state.fontBold ? 'normal' : 'bold'; }
-  function saveFontSettings() { localStorage.setItem('wordlyViewerFontSettings', JSON.stringify({ size: state.fontSize, bold: state.fontBold })); }
-  function handleFontSizeToggle() { resetHeaderCollapseTimer(); state.fontSize = state.fontSize === 'normal' ? 'large' : 'normal'; applyFontSettings(); saveFontSettings(); }
-  function handleFontBoldToggle() { resetHeaderCollapseTimer(); state.fontBold = !state.fontBold; applyFontSettings(); saveFontSettings(); }
+  // --- MODIFIED: Font logic updated for new UI ---
+  function loadFontSettings() { 
+    try { 
+        const settings = localStorage.getItem('wordlyViewerFontSettings'); 
+        if (settings) { 
+            const parsed = JSON.parse(settings); 
+            state.fontSize = parsed.size === 'large' ? 'large' : 'normal'; 
+            state.fontBold = !!parsed.bold; 
+        } 
+    } catch (e) {
+        // Defaults for new users
+        state.fontSize = 'normal';
+        state.fontBold = false;
+    } 
+    applyFontSettings(); 
+  }
+
+  function applyFontSettings() { 
+    appPage.classList.remove('font-normal', 'font-large', 'font-bold'); 
+    appPage.classList.add(state.fontSize === 'large' ? 'font-large' : 'font-normal'); 
+    if (state.fontBold) appPage.classList.add('font-bold'); 
+
+    // Update the A+/A- button
+    const sizeIcon = fontSizeToggleBtn.querySelector('.font-size-icon');
+    sizeIcon.innerHTML = state.fontSize === 'normal' ? 'A+' : 'A-';
+    
+    // Update the B button
+    fontBoldToggleBtn.style.fontWeight = state.fontBold ? 'normal' : 'bold';
+    fontBoldToggleBtn.classList.toggle('active', state.fontBold);
+  }
+
+  function saveFontSettings() { 
+    localStorage.setItem('wordlyViewerFontSettings', JSON.stringify({ size: state.fontSize, bold: state.fontBold })); 
+  }
+
+  function handleFontSizeToggle() {
+      resetHeaderCollapseTimer();
+      state.fontSize = state.fontSize === 'normal' ? 'large' : 'normal';
+      applyFontSettings();
+      saveFontSettings();
+  }
+
+  function handleFontBoldToggle() { 
+      resetHeaderCollapseTimer(); 
+      state.fontBold = !state.fontBold; 
+      applyFontSettings(); 
+      saveFontSettings(); 
+  }
 
   function loadThemeSettings() { try { const themeSetting = localStorage.getItem('wordlyViewerTheme'); if (themeSetting) state.darkMode = themeSetting === 'dark'; applyTheme();} catch (e) {} }
   function applyTheme() { const themeValue = state.darkMode ? 'dark' : 'light'; document.documentElement.setAttribute('data-theme', themeValue); updateThemeIcons(themeToggleBtn); updateThemeIcons(loginThemeToggleBtn); }
